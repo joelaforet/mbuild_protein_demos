@@ -1,26 +1,33 @@
 # mBuild Protein Demos
 
-Tutorials for preparing and **covalently modifying proteins with
-[mBuild](https://github.com/mosdef-hub/mbuild)**, then handing the
-modified structure off to standard parameterization engines:
-**GMSO/foyer, ParmEd, RDKit, and OpenFF (Pablo + Interchange)**.
+**Prepare and covalently modify proteins with
+[mBuild](https://github.com/mosdef-hub/mbuild), then hand off to the
+parameterization engine of your choice.**
 
-The workflow in one breath: load a protonated protein PDB with full
-chemistry (formal charges, bond orders, residue identity), attach any
-fragment written as star-sited SMILES / SDF / PDB, get clash-checked and
-relaxed coordinates, and export a prepared PDB plus neutral bond
-records that downstream tools consume.
+Two notebooks tell the whole story:
 
-> These tutorials track the `feat/scope-trim` branch of
+| Notebook | What it shows |
+|---|---|
+| `01_load_and_export.ipynb` | Load a protonated protein PDB into an mBuild Compound with full chemistry (formal charges, bond orders, residue identity), and export it to **GMSO**, **ParmEd**, **RDKit**, a prepared **PDB**, and **OpenFF**. |
+| `02_modify_and_simulate.ipynb` | Build a fragment from scratch (star-sited SMILES), covalently `attach()` it to a lysine, export the modified PDB + bond record — then watch that output feed the OpenFF ecosystem: Pablo ingestion, NAGL charges, ff14SB + Sage via Interchange, solvation, and a short OpenMM MD run. |
+
+mBuild owns the coordinates; the force-field assignment is deliberately
+downstream (MosDef does not ship biopolymer force fields yet, so the
+demo uses OpenFF for that step).
+
+> The notebooks track the `feat/scope-trim` branch of
 > [joelaforet/mbuild](https://github.com/joelaforet/mbuild), proposed
 > upstream to mosdef-hub/mbuild.
+> **More demos** (multi-site polymer tethering, glycans from GLYCAM
+> PDBs, branched sugars, mixed force fields, a PyMOL placement movie)
+> live on the [`showcase-extras`](../../tree/showcase-extras) branch.
 
 ## Getting started
 
 ### 1. Install pixi (once per machine)
 
 [Pixi](https://pixi.sh) manages the whole software environment for
-these tutorials — no conda setup needed.
+these tutorials - no conda setup needed.
 
 ```bash
 curl -fsSL https://pixi.sh/install.sh | sh
@@ -44,43 +51,24 @@ pixi run setup    # installs the mBuild biopolymers branch + openff-pablo
 pixi run lab
 ```
 
-This starts JupyterLab **inside the pixi environment**, with the
-quickstart notebook open. The default `Python 3 (ipykernel)` kernel of
-this JupyterLab *is* the tutorial environment — you do not need to
-switch kernels. (If you instead use an external Jupyter or VS Code,
-register the environment as a named kernel once:
+This starts JupyterLab **inside the pixi environment**, with both
+notebooks open. The default `Python 3 (ipykernel)` kernel of this
+JupyterLab *is* the tutorial environment - you do not need to switch
+kernels. (If you instead use an external Jupyter or VS Code, register
+the environment as a named kernel once:
 `pixi run python -m ipykernel install --user --name mbuild-protein-demos`
 and select `mbuild-protein-demos` in the kernel picker.)
 
-Everything also runs without notebooks:
-
-```bash
-pixi run showcase   # the full triply-modified-ubiquitin build + OpenFF ingestion
-```
-
-## The tutorials
-
-| File | What it shows |
-|---|---|
-| `quickstart_functionalize.ipynb` | **Start here.** PDB + star-sited SMILES fragment → modified PDB + bond records → OpenFF, RDKit, GMSO, ParmEd handoffs. ~15 lines of user code. |
-| `mbuild_pablo_ptm_demo.ipynb` | The maximal showcase: a polymer trimer (amide at LYS63), a GLYCAM glycan from PDB (ASN60), and a branched glycan from SMILES (SER20) on one ubiquitin, loaded through OpenFF Pablo. |
-| `maximal_validation.py` | The same showcase as a plain script (`pixi run showcase`). |
-| `tether_movie.py` / `tether_movie.pdb` | Generates (and ships) a 47-state PyMOL movie of a polymer being tethered to two lysines: rigid placement → rotation → shear → relaxation. `pymol tether_movie.pdb`, then `mplay`. |
-| `mbuild_extras.py` | Fork-only helpers used by the showcase: `fragment_from_pdb` (legacy PDB fragments), `attach_multi` (multi-site tethering), and the OpenFF Pablo formatting glue for bond records. |
+Run notebook 01 first (it creates the protonated input), then 02.
 
 ## Inputs
 
-`1UBQ_testProtein.cleaned.pdb` (ubiquitin crystal structure),
-`1ubq_protonated.pdb` and `6m03_protonated.pdb` (pdbfixer, pH 7), and
-`glycam_G42666HT_CONECT.pdb` (a GLYCAM glycan with CONECT records).
-The quickstart shows the one-time pdbfixer protonation step, so you
-can substitute your own protein.
+`1UBQ_testProtein.cleaned.pdb` — the ubiquitin crystal structure.
+Notebook 01 protonates it once with pdbfixer at pH 7; substitute your
+own protein the same way.
 
 ## Notes
 
-- The protein input must be **fully protonated** at your target pH
-  (pdbfixer or reduce). The loader errors, naming the residue and the
-  fix, on anything it cannot match — it never guesses chemistry.
-- Force-field assignment is deliberately **out of scope for mBuild**:
-  the tutorials hand off to OpenFF here, and the same exports feed
-  GMSO/foyer or ParmEd workflows.
+- The protein input must be **fully protonated** at your target pH.
+  The loader errors, naming the residue and the fix, on anything it
+  cannot match - it never guesses chemistry.
