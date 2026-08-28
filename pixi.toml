@@ -1,0 +1,45 @@
+[workspace]
+name = "mbuild_protein_demos"
+description = "Tutorials: prepare and covalently modify proteins with mBuild, hand off to GMSO / OpenFF / RDKit"
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-arm64", "osx-64"]
+
+[dependencies]
+# openff-pablo requires python >= 3.12
+python = ">=3.12,<3.13"
+# mBuild runtime dependencies (mBuild itself installs via `pixi run setup`)
+ele = "*"
+numpy = ">=2.0,<2.6"
+packmol = ">=20.15"
+cgsmiles = ">=1.0.2"
+gmso = ">=0.16.2"
+garnett = "*"
+numba = "*"
+parmed = ">=3.4.3"
+pycifrw = "*"
+rdkit = ">=2021"
+scipy = "*"
+networkx = "*"
+treelib = "*"
+hoomd = ">=4"
+# simulation + preparation
+openmm = "*"
+pdbfixer = "*"
+# OpenFF handoff (pablo installs via `pixi run setup`)
+openff-toolkit-base = ">=0.17.1"
+gemmi = "*"
+rustworkx = "*"
+pyxdg = "*"
+# notebooks
+jupyterlab = "*"
+ipykernel = "*"
+pip = "*"
+
+[tasks]
+# Installs the mBuild biopolymers branch and openff-pablo into this
+# environment. Run once after `pixi install`.
+setup = 'pip install --no-deps "git+https://github.com/joelaforet/mbuild.git@feat/scope-trim" "git+https://github.com/openforcefield/openff-pablo.git@v0.2.2"'
+# Opens the tutorials.
+lab = "jupyter lab quickstart_functionalize.ipynb"
+# Runs the full showcase script end to end (no notebook needed).
+showcase = "python maximal_validation.py"
