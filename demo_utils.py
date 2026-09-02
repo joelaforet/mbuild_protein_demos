@@ -1,9 +1,10 @@
 """Helpers for the two mBuild protein demo notebooks.
 
-The notebooks stay short because the display code, the relaxation movie,
-and the OpenFF Pablo boilerplate live here. Nothing in this file is part
-of mBuild: it uses only the public API of ``mbuild.biopolymers`` and
-``mbuild.simulation``.
+The notebooks call the mBuild API directly, because showing that API is
+the point of the demo. What lives here is the code around it: the
+NGLView display, the relaxation movie, and the openff-pablo
+boilerplate. Nothing in this file is part of mBuild, and nothing here
+hides an mBuild call that a reader should see.
 
 Three groups of functions:
 
@@ -13,9 +14,11 @@ Three groups of functions:
   branch.
 - Geometry: ``relax_movie`` minimizes the attached fragments in small
   steps and records one movie frame per step.
-- OpenFF handoff: ``functionalize``, ``pablo_residue_library``, and
+- OpenFF handoff: ``pablo_residue_library`` and
   ``pablo_crosslink_kwargs`` turn one attachment into the residue
-  definition and crosslink declaration that openff-pablo needs.
+  definition and crosslink declaration that openff-pablo needs. They
+  wrap openff-pablo and RDKit calls, not mBuild calls: the notebooks
+  call the mBuild API themselves.
 """
 
 import logging
@@ -56,41 +59,6 @@ def pablo_crosslink_kwargs(record):
     }
 
 
-def functionalize(protein, smiles, resname, site, relax=True):
-    """Attach a starred-SMILES fragment to one site of a protein.
-
-    Parameters
-    ----------
-    protein : mbuild.biopolymers.Protein
-        The protein to modify in place.
-    smiles : str
-        SMILES of the fragment with one ``*``. The star marks the atom
-        that forms the new bond and becomes the leaving hydrogen.
-    resname : str
-        Residue name given to the attached fragment. Use it later as
-        the Pablo residue-definition key.
-    site : dict
-        Keyword arguments for ``Protein.attach``, for example
-        ``dict(resnum=63, atom_name="NZ", chain_id="A")``.
-    relax : bool, optional, default=True
-        Passed to ``Protein.attach``. Pass ``False`` when a later
-        ``relax_movie`` call is to show the relaxation.
-
-    Returns
-    -------
-    tuple of (mbuild.Compound, mbuild.biopolymers.protein.InterResidueBond)
-        The pristine fragment and the recorded bond. ``attach`` clones
-        the fragment and removes one hydrogen from the clone, so the
-        returned fragment still holds every atom of the free molecule.
-        ``pablo_residue_library`` needs that complete atom list.
-    """
-    from mbuild.biopolymers import prepare_fragment
-
-    fragment = prepare_fragment(smiles, resname)
-    record = protein.attach(fragment, relax=relax, **site)
-    return fragment, record
-
-
 def pablo_residue_library(smiles, fragment, resname, records):
     """Build an openff-pablo residue library for one attached fragment.
 
@@ -102,8 +70,8 @@ def pablo_residue_library(smiles, fragment, resname, records):
     smiles : str
         The same starred SMILES that built the fragment.
     fragment : mbuild.Compound
-        The pristine fragment, as returned by ``prepare_fragment`` or
-        ``functionalize``. Its atom order matches the definition built
+        The pristine fragment, as returned by ``prepare_fragment``.
+        Its atom order matches the definition built
         from the SMILES, so the atom names transfer by position. Do not
         pass the fragment residue taken out of the protein: ``attach``
         removed its leaving hydrogen, so the two atom lists differ in
