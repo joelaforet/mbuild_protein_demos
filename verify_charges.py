@@ -4,12 +4,16 @@ Run it from the repository root through pixi::
 
     pixi run python verify_charges.py
 
-The script repeats notebook 02 without a notebook: it attaches the octanoyl
-fragment to the protein in memory, builds the pablo residue library from the
-bond record that ``attach`` wrote, loads the two topologies, runs the
-functions of ``demo_charges``, and reports the timing and the result of every
-check. The conjugate PDB file goes to a scratch directory, so the repository
-files do not change. The script exits with status 1 when a check fails.
+The script repeats notebook 02 without a notebook: it deprotonates the lysine
+side chain, attaches the octanoyl fragment to the protein in memory, builds
+the pablo residue library from the bond record that ``attach`` wrote, loads
+the two topologies, runs the functions of ``demo_charges``, and reports the
+timing and the result of every check. The site loses its proton first,
+because the protonated amine carries no lone pair and is not the reactive
+form of the side chain. The neutral amine reacts, so the product is a neutral
+secondary amide. The conjugate PDB file goes to a scratch directory, so the
+repository files do not change. The script exits with status 1 when a check
+fails.
 """
 
 import os
@@ -38,7 +42,7 @@ RESNUM = 63
 CHAIN_ID = "A"
 SCRATCH_DIR = (
     "/tmp/claude-1000/-home-joelaforet-Shirts-Lab-Linux-mbuild/"
-    "e079c359-8ac9-4840-993c-a2a01a7ce492/scratchpad/wave4fix"
+    "e079c359-8ac9-4840-993c-a2a01a7ce492/scratchpad/vcfix"
 )
 CONJUGATE_PDB = os.path.join(SCRATCH_DIR, "1ubq_octanoyl.pdb")
 
@@ -54,6 +58,13 @@ def check(name, passed, detail):
 def build_conjugate():
     """Attach the fragment in memory and write the conjugate to scratch.
 
+    ``Protein.deprotonate`` runs before ``attach``, as in notebook 02. The
+    lysine side chain carries an ammonium group at pH 7, and that group does
+    not attack the acyl carbon. The site therefore loses one proton first.
+    The net formal charge of the protein falls from 0 to -1 at that step, and
+    the new bond takes the place of an N-H bond, so the nitrogen keeps a
+    formal charge of zero and the net charge stays at -1.
+
     ``relax=False`` matches the notebook: the charges read the molecular
     graph only, so the placement of the fragment does not change them.
 
@@ -68,6 +79,7 @@ def build_conjugate():
     from mbuild.biopolymers import Protein, prepare_fragment
 
     protein = Protein(UNMODIFIED_PDB)
+    protein.deprotonate(RESNUM, ATOM_NAME, chain_id=CHAIN_ID)
     fragment = prepare_fragment(FRAGMENT_SMILES, FRAGMENT_RESNAME)
     protein.attach(
         fragment,
@@ -149,7 +161,15 @@ def main():
         f"({len(kept_indices)} cut out, {local.n_atoms - len(kept_indices)} caps) | "
         f"formal charge {local.total_charge.m_as(unit.elementary_charge):+.0f}"
     )
-    print(f"local model SMILES: {local.to_smiles(explicit_hydrogens=False)}")
+    smiles = local.to_smiles(explicit_hydrogens=False)
+    local_charge = local.total_charge.m_as(unit.elementary_charge)
+    print(f"local model SMILES: {smiles}")
+    check(
+        "the site is a neutral secondary amide",
+        local_charge == 0.0 and "N+" not in smiles,
+        f"{local.n_atoms} atoms, formal charge {local_charge:+.0f} e, "
+        "no positively charged nitrogen in the SMILES",
+    )
 
     reference = library_charge_map(unmodified_topology)
 
