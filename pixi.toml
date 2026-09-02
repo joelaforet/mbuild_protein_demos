@@ -46,6 +46,8 @@ pip = "*"
 # Installs the mBuild biopolymers branch and openff-pablo into this
 # environment. Run once after `pixi install`.
 setup = 'pip install --no-deps "git+https://github.com/joelaforet/mbuild.git@feat/scope-trim" "git+https://github.com/openforcefield/openff-pablo.git@v0.2.2"'
+# Installs mbuild from a local checkout, so module edits apply at once.
+dev = 'pip install --no-deps -e ../mbuild'
 # Opens the tutorials.
 lab = "jupyter lab 01_load_and_export.ipynb 02_modify_and_simulate.ipynb"
 # Executes both tutorials headless and writes the outputs back into the
