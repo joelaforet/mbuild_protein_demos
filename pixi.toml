@@ -38,6 +38,8 @@ pyxdg = "*"
 # notebooks
 jupyterlab = "*"
 ipykernel = "*"
+nglview = ">=4.0"
+ipywidgets = ">=8"
 pip = "*"
 
 [tasks]
@@ -46,3 +48,6 @@ pip = "*"
 setup = 'pip install --no-deps "git+https://github.com/joelaforet/mbuild.git@feat/scope-trim" "git+https://github.com/openforcefield/openff-pablo.git@v0.2.2"'
 # Opens the tutorials.
 lab = "jupyter lab 01_load_and_export.ipynb 02_modify_and_simulate.ipynb"
+# Executes both tutorials headless and writes the outputs back into the
+# notebook files. Use it to check that the demo still runs end to end.
+verify = "jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=1800 01_load_and_export.ipynb 02_modify_and_simulate.ipynb"
