@@ -50,4 +50,7 @@ setup = 'pip install --no-deps "git+https://github.com/joelaforet/mbuild.git@fea
 lab = "jupyter lab 01_load_and_export.ipynb 02_modify_and_simulate.ipynb"
 # Executes both tutorials headless and writes the outputs back into the
 # notebook files. Use it to check that the demo still runs end to end.
-verify = "jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=1800 01_load_and_export.ipynb 02_modify_and_simulate.ipynb"
+# store_widget_state=False keeps the NGLView widget state out of the
+# files: it holds the whole structure as text, it needs the NGLView
+# front end to mean anything, and it would add 360 kB of diff per run.
+verify = "jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=1800 --ExecutePreprocessor.store_widget_state=False 01_load_and_export.ipynb 02_modify_and_simulate.ipynb"
