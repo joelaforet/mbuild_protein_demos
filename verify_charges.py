@@ -36,7 +36,9 @@ from demo_charges import (
 
 UNMODIFIED_PDB = "1ubq_protonated.pdb"
 FRAGMENT_SMILES = "*C(=O)CCCCCCC"
-FRAGMENT_RESNAME = "OCT"
+# The wwPDB Chemical Component Dictionary does not assign the code OC8,
+# so no CCD component can take the place of this fragment definition.
+FRAGMENT_RESNAME = "OC8"
 ATOM_NAME = "NZ"
 RESNUM = 63
 CHAIN_ID = "A"

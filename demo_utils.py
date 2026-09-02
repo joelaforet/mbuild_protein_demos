@@ -220,7 +220,7 @@ def show_protein(
         name the chain.
     highlight_resnames : iterable of str, optional
         Residue names to draw as ball-and-stick, for example
-        ``["OCT"]`` for an attached fragment.
+        ``["OC8"]`` for an attached fragment.
     chain_colors : str, optional, default="chainname"
         NGL color scheme for the cartoon.
     width, height : str, optional
