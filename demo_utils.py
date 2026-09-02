@@ -179,35 +179,212 @@ def _pdb_text(source, scratch=SCRATCH_PDB):
     return text
 
 
-def _highlight_selection(resnums, resnames):
-    """Build one NGL selection string from residue numbers and names.
+# NGL reads a color as a hex value or as a CSS color name. These are hex
+# values, so the picture does not change with the color name table of
+# the browser.
+PROTEIN_COLOR = "#BFBFBF"  # grey
+LINK_COLOR = "#00CED1"  # cyan
+FRAGMENT_COLOR = "#3CB44B"  # green
 
-    Residue numbers may be plain integers (``63``) or, when numbers
-    repeat across chains, ``"number:chain"`` strings (``"63:A"``).
+
+def _residue_term(resnum, chain_id):
+    """Return the NGL selection term for one residue.
+
+    In the NGL selection language a residue number stands alone
+    (``63``) and a chain identifier follows a colon (``63:A``). A
+    protein that was read without chain identifiers has none to add.
+
+    Parameters
+    ----------
+    resnum : int
+        The PDB residue sequence number.
+    chain_id : str
+        The chain identifier, or an empty string.
+
+    Returns
+    -------
+    str
+        One NGL selection term.
     """
-    parts = [f"[{resname}]" for resname in resnames or ()]
-    parts += [str(resnum) for resnum in resnums or ()]
-    return " or ".join(parts)
+    return f"{resnum}:{chain_id}" if chain_id else str(resnum)
 
 
-def _style_view(view, highlight, chain_colors):
-    """Draw a cartoon backbone plus ball-and-stick on the highlight."""
+def _chain_ids(protein):
+    """Return the chain identifiers of a protein, each one once."""
+    return list(dict.fromkeys(chain.chain_id for chain in protein.chains))
+
+
+def _residue_chains(protein):
+    """Map each ``(residue name, residue number)`` pair to its chains.
+
+    ``Protein.bond_records()`` names a residue by name and number and
+    carries no chain identifier, so a record alone cannot address a
+    residue of a protein of several chains. This map supplies the
+    chain. The value is a list, because one name and number can occur
+    in more than one chain.
+
+    Parameters
+    ----------
+    protein : mbuild.biopolymers.Protein
+        The protein to walk.
+
+    Returns
+    -------
+    dict
+        Map of ``(residue name, residue number)`` to a list of chain
+        identifiers.
+    """
+    mapping = {}
+    for chain_id in _chain_ids(protein):
+        for residue in protein.residues(chain_id=chain_id):
+            key = (residue.name, residue.resnum)
+            mapping.setdefault(key, []).append(chain_id)
+    return mapping
+
+
+def _modification_selections(protein):
+    """Return the NGL selections of the linkage and the fragment residues.
+
+    ``Residue.hetatm`` marks every attached fragment residue.
+    ``Protein.bond_records()`` names the residues on both sides of each
+    recorded inter-residue bond; those are the residues that take part
+    in a covalent linkage. The fragment residues are taken out of the
+    linkage set, so each residue carries one color.
+
+    Parameters
+    ----------
+    protein : mbuild.biopolymers.Protein
+        The protein to read.
+
+    Returns
+    -------
+    tuple of (str, str)
+        The linkage selection and the fragment selection. Either is an
+        empty string when the protein holds no such residue.
+    """
+    chains = _residue_chains(protein)
+    fragment_keys = set()
+    fragment_terms = []
+    for chain_id in _chain_ids(protein):
+        for residue in protein.residues(chain_id=chain_id):
+            if residue.hetatm:
+                fragment_keys.add((residue.name, residue.resnum))
+                fragment_terms.append(_residue_term(residue.resnum, chain_id))
+
+    link_terms = []
+    seen = set()
+    for record in protein.bond_records():
+        for key in zip(record["residue_names"], record["residue_numbers"]):
+            if key in fragment_keys or key in seen:
+                continue
+            seen.add(key)
+            chain_ids = chains.get(key, [])
+            if len(chain_ids) == 1:
+                link_terms.append(_residue_term(key[1], chain_ids[0]))
+                continue
+            # The name and the number match a residue of more than one
+            # chain, and the record holds no chain identifier. The bare
+            # number selects that residue in every chain.
+            logger.warning(
+                "Residue %s %s occurs in chains %s, and a bond record "
+                "carries no chain identifier. The view draws that residue "
+                "in every one of those chains. Pass link_selection to draw "
+                "one of them.",
+                key[0],
+                key[1],
+                chain_ids or "(none)",
+            )
+            link_terms.append(str(key[1]))
+    return " or ".join(link_terms), " or ".join(fragment_terms)
+
+
+def _resolve_selections(protein, link_selection, fragment_selection):
+    """Fill the selections the caller left out from the protein itself.
+
+    Parameters
+    ----------
+    protein : mbuild.biopolymers.Protein or None
+        The protein to derive from. None when the source is a PDB file
+        or PDB text, which carries no bond record.
+    link_selection, fragment_selection : str or None
+        The values the caller passed. None asks for the derived value.
+
+    Returns
+    -------
+    tuple of (str, str)
+        The linkage selection and the fragment selection.
+    """
+    if link_selection is not None and fragment_selection is not None:
+        return link_selection, fragment_selection
+    derived_link, derived_fragment = "", ""
+    if protein is not None:
+        derived_link, derived_fragment = _modification_selections(protein)
+    return (
+        derived_link if link_selection is None else link_selection,
+        derived_fragment if fragment_selection is None else fragment_selection,
+    )
+
+
+def _style_view(view, link_selection, fragment_selection):
+    """Draw a grey cartoon, cyan linkage sticks and green fragment sticks.
+
+    ``licorice`` is the NGL name of the stick representation. NGLView
+    sends a representation name straight to NGL, and NGL draws nothing
+    for a name that its registry does not hold. ``ball_and_stick`` is
+    such a name: the registered name is ``ball+stick``, and the
+    ``add_ball_and_stick`` shortcut of NGLView translates it, but
+    ``add_representation`` does not.
+
+    The NGL ``protein`` selection covers the standard polymer residues
+    only. An attached fragment carries a residue name outside that set,
+    so the cartoon leaves the fragment out. The stick representation on
+    the fragment selection is the only drawing of the fragment.
+
+    NGL holds no template for a fragment residue, so it finds the bonds
+    inside that residue by interatomic distance.
+
+    Parameters
+    ----------
+    view : nglview.NGLWidget
+        The widget to style.
+    link_selection : str
+        NGL selection of the linkage residues, or an empty string.
+    fragment_selection : str
+        NGL selection of the fragment residues, or an empty string.
+    """
     view.clear_representations()
-    view.add_representation("cartoon", selection="protein", color=chain_colors)
-    if highlight:
-        view.add_representation("ball_and_stick", selection=highlight)
-        view.center(selection=highlight)
+    view.add_representation("cartoon", selection="protein", color=PROTEIN_COLOR)
+    if link_selection:
+        view.add_representation("licorice", selection=link_selection, color=LINK_COLOR)
+    if fragment_selection:
+        view.add_representation(
+            "licorice", selection=fragment_selection, color=FRAGMENT_COLOR
+        )
+        # The modification is the subject of the picture, so the view
+        # centers on it.
+        view.center(selection=fragment_selection)
 
 
 def show_protein(
     source,
-    highlight_resnums=None,
-    highlight_resnames=None,
-    chain_colors="chainname",
+    link_selection=None,
+    fragment_selection=None,
     width="700px",
     height="500px",
 ):
-    """Show a protein as a cartoon, with chosen residues in atom detail.
+    """Show a protein as a grey cartoon with the modification in sticks.
+
+    A ``Protein`` describes its own modifications, so the default view
+    needs no further argument. ``Protein.bond_records()`` names the
+    residues of every recorded inter-residue bond, and ``Residue.hetatm``
+    marks the attached fragment residues. The fragment residues become
+    green sticks, the other residues of those bonds become cyan sticks,
+    and the view centers on the fragment.
+
+    A PDB path and PDB text hold no bond record, so the derivation does
+    not run for those sources. Pass ``link_selection`` and
+    ``fragment_selection`` with such a source, or the view shows the
+    grey cartoon alone.
 
     Parameters
     ----------
@@ -215,14 +392,17 @@ def show_protein(
         A protein, the path of a PDB file, or PDB text. A protein is
         written to ``SCRATCH_PDB`` first, so the view shows exactly the
         file that a downstream loader reads.
-    highlight_resnums : iterable, optional
-        Residue numbers to draw as ball-and-stick. Use ``"63:A"`` to
-        name the chain.
-    highlight_resnames : iterable of str, optional
-        Residue names to draw as ball-and-stick, for example
-        ``["OC8"]`` for an attached fragment.
-    chain_colors : str, optional, default="chainname"
-        NGL color scheme for the cartoon.
+    link_selection : str, optional
+        NGL selection of the residues that take part in a covalent
+        linkage, drawn as cyan sticks. In the NGL selection language a
+        residue number stands alone (``63``), a chain identifier
+        follows a colon (``63:A``), a residue name goes in brackets
+        (``[OC8]``), and terms join with ``or`` and ``and``. Default:
+        derived from a ``Protein``, empty for any other source.
+    fragment_selection : str, optional
+        NGL selection of the attached fragment, drawn as green sticks
+        and centered in the view. Default: the HETATM residues of a
+        ``Protein``, empty for any other source.
     width, height : str, optional
         Widget size as a CSS length.
 
@@ -231,10 +411,10 @@ def show_protein(
     nglview.NGLWidget
         Display it as the last expression of a notebook cell.
     """
+    protein = source if hasattr(source, "bond_records") else None
     text = _pdb_text(source)
     view = nglview.NGLWidget(nglview.TextStructure(text, ext="pdb"))
-    highlight = _highlight_selection(highlight_resnums, highlight_resnames)
-    _style_view(view, highlight, chain_colors)
+    _style_view(view, *_resolve_selections(protein, link_selection, fragment_selection))
     view.layout.width = width
     view.layout.height = height
     return view
@@ -281,13 +461,22 @@ def _split_models(text):
 
 def show_movie(
     source,
-    highlight_resnums=None,
-    highlight_resnames=None,
-    chain_colors="chainname",
+    protein=None,
+    link_selection=None,
+    fragment_selection=None,
     width="700px",
     height="500px",
 ):
     """Show a relaxation movie with a frame slider.
+
+    The picture is the one of ``show_protein``: a grey cartoon, cyan
+    sticks on the residues of each covalent linkage, green sticks on the
+    attached fragment, and the view centered on the fragment.
+
+    The source of a movie is a multi-MODEL PDB file, which holds no bond
+    record. Pass the ``Protein`` that the movie was made from, and this
+    function derives the two selections from it, as ``show_protein``
+    does. Pass the selections instead when no protein object is at hand.
 
     Parameters
     ----------
@@ -295,7 +484,11 @@ def show_movie(
         The path of a multi-MODEL PDB file, or the tuple that
         ``relax_movie`` returns. The tuple form skips re-reading the
         coordinates from the file.
-    highlight_resnums, highlight_resnames, chain_colors, width, height
+    protein : mbuild.biopolymers.Protein, optional
+        The protein whose relaxation the movie shows. It supplies the
+        default selections. The atom order of the movie is the atom
+        order of that protein, so the selections match the frames.
+    link_selection, fragment_selection, width, height
         As in ``show_protein``.
 
     Returns
@@ -311,8 +504,7 @@ def show_movie(
         path, frames = source[0], np.asarray(source[1])
         frame_text, _ = _split_models(_pdb_text(path))
     view = nglview.NGLWidget(_TextFrames(frame_text, frames))
-    highlight = _highlight_selection(highlight_resnums, highlight_resnames)
-    _style_view(view, highlight, chain_colors)
+    _style_view(view, *_resolve_selections(protein, link_selection, fragment_selection))
     view.layout.width = width
     view.layout.height = height
     return view
