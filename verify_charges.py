@@ -4,12 +4,15 @@ Run it from the repository root through pixi::
 
     pixi run python verify_charges.py
 
-The script builds the pablo residue library the way notebook 02 builds it,
-loads the unmodified protein and the conjugate, runs the three functions of
-``demo_charges``, and reports the timing and the result of every check. It
-exits with status 1 when a check fails.
+The script repeats notebook 02 without a notebook: it attaches the octanoyl
+fragment to the protein in memory, builds the pablo residue library from the
+bond record that ``attach`` wrote, loads the two topologies, runs the
+functions of ``demo_charges``, and reports the timing and the result of every
+check. The conjugate PDB file goes to a scratch directory, so the repository
+files do not change. The script exits with status 1 when a check fails.
 """
 
+import os
 import sys
 import time
 
@@ -22,16 +25,22 @@ from rdkit import Chem
 from demo_charges import (
     assign_split_charges,
     atom_key,
-    build_interchange,
     build_local_model,
     library_charge_map,
+    parameterize_with_preset_charges,
 )
 
 UNMODIFIED_PDB = "1ubq_protonated.pdb"
-CONJUGATE_PDB = "1ubq_octanoyl.pdb"
 FRAGMENT_SMILES = "*C(=O)CCCCCCC"
 FRAGMENT_RESNAME = "OCT"
-SITE = {"chain_id": "A", "residue_number": 63}
+ATOM_NAME = "NZ"
+RESNUM = 63
+CHAIN_ID = "A"
+SCRATCH_DIR = (
+    "/tmp/claude-1000/-home-joelaforet-Shirts-Lab-Linux-mbuild/"
+    "e079c359-8ac9-4840-993c-a2a01a7ce492/scratchpad/wave4fix"
+)
+CONJUGATE_PDB = os.path.join(SCRATCH_DIR, "1ubq_octanoyl.pdb")
 
 results = []
 
@@ -42,16 +51,45 @@ def check(name, passed, detail):
     print(f"[{'pass' if passed else 'FAIL'}] {name}: {detail}")
 
 
-def residue_library():
+def build_conjugate():
+    """Attach the fragment in memory and write the conjugate to scratch.
+
+    ``relax=False`` matches the notebook: the charges read the molecular
+    graph only, so the placement of the fragment does not change them.
+
+    Returns
+    -------
+    fragment : mbuild.Compound
+        The pristine fragment. Its atom names transfer to the pablo residue
+        definition by position.
+    record : dict
+        The first entry of ``Protein.bond_records()``.
+    """
+    from mbuild.biopolymers import Protein, prepare_fragment
+
+    protein = Protein(UNMODIFIED_PDB)
+    fragment = prepare_fragment(FRAGMENT_SMILES, FRAGMENT_RESNAME)
+    protein.attach(
+        fragment,
+        resnum=RESNUM,
+        atom_name=ATOM_NAME,
+        chain_id=CHAIN_ID,
+        relax=False,
+    )
+    os.makedirs(SCRATCH_DIR, exist_ok=True)
+    protein.save_pdb(CONJUGATE_PDB, overwrite=True)
+    return fragment, protein.bond_records()[0]
+
+
+def residue_library(fragment, record):
     """Return the pablo residue library that reads the octanoyl conjugate.
 
     The definition comes from the same starred SMILES that mBuild used, so
-    that the atom order matches. The names come from the pristine fragment
-    that ``prepare_fragment`` returns, because ``attach`` removes the
-    leaving hydrogen from the copy it bonds to the protein.
+    that the atom order matches. The names come from the pristine fragment,
+    because ``attach`` removes the leaving hydrogen from the copy it bonds to
+    the protein. The crosslink comes from the bond record, the way notebook
+    02 builds it.
     """
-    from mbuild.biopolymers import prepare_fragment
-
     star = Chem.RWMol(Chem.MolFromSmiles(FRAGMENT_SMILES))
     for atom in star.GetAtoms():
         if atom.GetAtomicNum() == 0:
@@ -59,9 +97,7 @@ def residue_library():
     molecule = star.GetMol()
     Chem.SanitizeMol(molecule)
     offmol = Molecule.from_rdkit(Chem.AddHs(molecule), allow_undefined_stereo=True)
-    for atom, particle in zip(
-        offmol.atoms, prepare_fragment(FRAGMENT_SMILES, FRAGMENT_RESNAME).particles()
-    ):
+    for atom, particle in zip(offmol.atoms, fragment.particles()):
         atom.name = particle.name
 
     return STD_CCD_CACHE.with_(
@@ -71,16 +107,25 @@ def residue_library():
             ]
         }
     ).with_crosslink(
-        residues=("LYS", FRAGMENT_RESNAME),
-        linking_atoms=("NZ", "C1"),
-        leaving_atoms=[["HZ1"], ["H1"]],
-        bond_order=1,
+        residues=list(record["residue_names"]),
+        linking_atoms=list(record["atom_names"]),
+        leaving_atoms=[list(side) for side in record["leaving_atoms"]],
+        bond_order=record["bond_order"],
     )
 
 
 def main():
     start = time.time()
-    library = residue_library()
+    fragment, record = build_conjugate()
+    print(
+        f"attachment: {time.time() - start:.1f} s | "
+        f"{record['residue_names'][0]}{record['residue_numbers'][0]} "
+        f"{record['atom_names'][0]} - {record['residue_names'][1]} "
+        f"{record['atom_names'][1]} | leaving {record['leaving_atoms']}"
+    )
+
+    start = time.time()
+    library = residue_library(fragment, record)
     print(f"residue library: {time.time() - start:.1f} s")
 
     start = time.time()
@@ -95,7 +140,10 @@ def main():
     )
 
     start = time.time()
-    local, kept_indices = build_local_model(conjugate, SITE, FRAGMENT_RESNAME)
+    local, kept_indices, residue, fragment_atoms = build_local_model(
+        conjugate, FRAGMENT_RESNAME, RESNUM, CHAIN_ID
+    )
+    site = residue | fragment_atoms
     print(
         f"local model: {time.time() - start:.1f} s | {local.n_atoms} atoms "
         f"({len(kept_indices)} cut out, {local.n_atoms - len(kept_indices)} caps) | "
@@ -103,9 +151,11 @@ def main():
     )
     print(f"local model SMILES: {local.to_smiles(explicit_hydrogens=False)}")
 
+    reference = library_charge_map(unmodified_topology)
+
     start = time.time()
     charged = assign_split_charges(
-        conjugate, unmodified_topology, FRAGMENT_RESNAME, SITE
+        conjugate, unmodified_topology, FRAGMENT_RESNAME, RESNUM, CHAIN_ID
     )
     print(f"split charges: {time.time() - start:.1f} s")
 
@@ -117,18 +167,10 @@ def main():
         f"{charges.sum():.9f} e against the formal {formal:+.0f} e",
     )
 
-    reference = library_charge_map(unmodified_topology)
-    moved = {
-        index
-        for index, atom in enumerate(conjugate.atoms)
-        if atom.metadata["residue_name"] == FRAGMENT_RESNAME
-        or (atom.metadata["chain_id"], atom.metadata["residue_number"])
-        == (SITE["chain_id"], SITE["residue_number"])
-    }
     deltas = [
         abs(charges[index] - reference[atom_key(atom)])
         for index, atom in enumerate(conjugate.atoms)
-        if index not in moved
+        if index not in site
     ]
     check(
         "unmodified residues keep the ff14SB charges",
@@ -137,7 +179,7 @@ def main():
     )
 
     start = time.time()
-    interchange = build_interchange(conjugate_topology, charged)
+    interchange = parameterize_with_preset_charges(conjugate_topology, charged)
     print(f"interchange: {time.time() - start:.1f} s")
     written = np.array(
         [

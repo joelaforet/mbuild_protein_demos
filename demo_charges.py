@@ -7,9 +7,9 @@ one per-atom array on the conjugate molecule, and the array is handed to
 Interchange as preset charges.
 
 The split is needed because the ff14SB library charges cover standard
-residues only. The conjugate contains one non-standard residue, so the
-all-or-nothing coverage test of the LibraryCharges handler fails and Sage
-2.3.0 falls back to its own NAGLCharges handler for the whole protein.
+residues only. The conjugate holds one non-standard residue. The coverage
+test, which needs a library charge for every atom, fails. Sage 2.3.0 then
+falls back to its own NAGLCharges handler for the whole protein.
 
 The charge model for the fragment is NAGL am1bcc graph charges
 (``openff-gnn-am1bcc-0.1.0-rc.3.pt``). It is not AshGC.
@@ -34,26 +34,12 @@ _UNUSED_HANDLERS = (
     "vdW",
 )
 
-#: Bond length of the hydrogen atoms that cap the local model, in angstrom.
-_CAP_BOND_LENGTH = 1.09
-
 
 def atom_key(atom):
-    """Return chain id, residue number, insertion code and name of an atom.
+    """Return the chain id, residue number, insertion code and name of an atom.
 
-    The key pairs the atoms of two topologies. A positional pairing is
-    wrong, because the fragment atoms shift every later index. Pablo writes
-    no ``atom_name`` metadata, so the name comes from the atom.
-
-    Parameters
-    ----------
-    atom : openff.toolkit.topology.Atom
-        Atom with the PDB metadata that openff-pablo writes.
-
-    Returns
-    -------
-    tuple
-        The four values, in that order.
+    The key pairs the atoms of two topologies. A positional pairing is wrong,
+    because the fragment atoms shift every later index.
     """
     metadata = atom.metadata
     return (
@@ -65,18 +51,11 @@ def atom_key(atom):
 
 
 def library_charge_map(topology):
-    """Return the ff14SB library charge of every atom in a protein topology.
+    """Return the ff14SB library charge of every atom of a protein topology.
 
-    Parameters
-    ----------
-    topology : openff.toolkit.Topology
-        Topology of standard residues only.
-
-    Returns
-    -------
-    dict
-        Map from :func:`atom_key` to charge in elementary charge. Two atoms
-        with one key raise ``ValueError``.
+    The topology holds standard residues only. The map goes from the key of
+    :func:`atom_key` to the charge in elementary charge. Two atoms with one
+    key raise ``ValueError``.
     """
     force_field = ForceField("ff14sb_off_impropers_0.0.4.offxml")
     for handler in _UNUSED_HANDLERS:
@@ -98,66 +77,84 @@ def library_charge_map(topology):
     return charge_map
 
 
-def _selected_indices(conjugate, site, fragment_resname):
-    """Return the atom indices of the modified residue and the fragment."""
-    residue = set()
-    fragment = set()
-    for index, atom in enumerate(conjugate.atoms):
-        metadata = atom.metadata
-        if (metadata["chain_id"], metadata["residue_number"]) == (
-            site["chain_id"],
-            site["residue_number"],
-        ):
-            residue.add(index)
-        if metadata["residue_name"] == fragment_resname:
-            fragment.add(index)
-    return residue, fragment
+def _label(atom):
+    """Return the chain, residue and atom name of an atom, for a message."""
+    data = atom.metadata
+    return (
+        f"chain {data['chain_id']} "
+        f"{data['residue_name']}{data['residue_number']} {atom.name}"
+    )
 
 
-def build_local_model(conjugate, site, fragment_resname):
+def build_local_model(conjugate, fragment_resname, resnum, chain_id):
     """Cut a capped model of the modification site out of the conjugate.
 
-    The selection holds the modified residue and the fragment residue. It
-    grows by two bonds through the molecule, so that the atoms of the
-    modification keep their real first and second neighbours. Every bond
-    that leaves the selection is replaced by a hydrogen atom on the bond
-    vector.
+    The selection holds the modified residue and the fragment. It grows by
+    two bonds through the molecule, so that the atoms of the modification
+    keep their real first and second neighbours. A hydrogen atom replaces
+    every bond that leaves the selection. The model carries no conformer,
+    because NAGL reads the molecular graph only.
 
     Parameters
     ----------
     conjugate : openff.toolkit.Molecule
-        The modified protein, with one conformer.
-    site : dict
-        ``chain_id`` and ``residue_number`` of the modified residue.
+        The modified protein.
     fragment_resname : str
         Residue name of the fragment.
+    resnum, chain_id : int, str
+        Residue number and chain of the modified residue. Its insertion
+        code must be blank.
 
     Returns
     -------
     local : openff.toolkit.Molecule
-        The capped model, with one conformer.
+        The capped model. The cap hydrogens follow the cut-out atoms.
     kept_indices : list of int
-        Index in ``conjugate`` of every atom of ``local`` that was cut out,
-        in the order of the atoms of ``local``. The cap hydrogens follow
-        these atoms and have no counterpart in ``conjugate``.
+        Index in ``conjugate`` of every cut-out atom, in the order of the
+        atoms of ``local``.
+    residue, fragment : set of int
+        Indices in ``conjugate`` of the modified residue and of the fragment.
 
     Raises
     ------
     ValueError
-        If the selection is empty, or if a bond of order greater than one
-        leaves the selection.
+        On an empty selection, a fragment bond outside the modified residue,
+        or a cut bond of order above one.
     """
-    residue, fragment = _selected_indices(conjugate, site, fragment_resname)
+    residue = set()
+    fragment = set()
+    for index, atom in enumerate(conjugate.atoms):
+        data = atom.metadata
+        if (
+            data["chain_id"] == chain_id
+            and data["residue_number"] == resnum
+            and str(data["insertion_code"]).strip() == ""
+        ):
+            residue.add(index)
+        if data["residue_name"] == fragment_resname:
+            fragment.add(index)
     if not residue:
-        raise ValueError(f"no atom of the conjugate matches the site {site}")
+        raise ValueError(
+            f"no atom of the conjugate lies in chain {chain_id} residue {resnum}"
+        )
     if not fragment:
         raise ValueError(f"the conjugate has no residue named {fragment_resname}")
 
     neighbours = [set() for _ in range(conjugate.n_atoms)]
     for bond in conjugate.bonds:
-        first, second = bond.atom1_index, bond.atom2_index
-        neighbours[first].add(second)
-        neighbours[second].add(first)
+        neighbours[bond.atom1_index].add(bond.atom2_index)
+        neighbours[bond.atom2_index].add(bond.atom1_index)
+
+    attached = {other for index in fragment for other in neighbours[index]} - fragment
+    if not attached <= residue:
+        outside = ", ".join(
+            _label(conjugate.atom(index)) for index in sorted(attached - residue)
+        )
+        raise ValueError(
+            f"the fragment {fragment_resname} is bonded to {outside}, outside "
+            f"chain {chain_id} residue {resnum}; the site residue number or the "
+            "fragment residue name is wrong"
+        )
 
     kept = residue | fragment
     for _ in range(2):
@@ -165,9 +162,7 @@ def build_local_model(conjugate, site, fragment_resname):
     kept_indices = sorted(kept)
     local_index = {index: order for order, index in enumerate(kept_indices)}
 
-    conformer = conjugate.conformers[0].m_as(unit.angstrom)
     local = Molecule()
-    positions = []
     for index in kept_indices:
         atom = conjugate.atom(index)
         local.add_atom(
@@ -176,7 +171,6 @@ def build_local_model(conjugate, site, fragment_resname):
             atom.is_aromatic,
             name=atom.name,
         )
-        positions.append(conformer[index])
 
     for bond in conjugate.bonds:
         ends = (bond.atom1_index, bond.atom2_index)
@@ -194,30 +188,57 @@ def build_local_model(conjugate, site, fragment_resname):
                     f"the selection cuts a bond of order {bond.bond_order} "
                     f"between atoms {bond.atom1_index} and {bond.atom2_index}"
                 )
-            (anchor,) = inside
-            outside = (
-                bond.atom2_index if anchor == bond.atom1_index else bond.atom1_index
-            )
             cap = local.add_atom(1, 0, False, name="HC")
-            local.add_bond(local_index[anchor], cap, 1, False)
-            vector = conformer[outside] - conformer[anchor]
-            direction = vector / np.linalg.norm(vector)
-            positions.append(conformer[anchor] + _CAP_BOND_LENGTH * direction)
+            local.add_bond(local_index[inside[0]], cap, 1, False)
 
-    local.add_conformer(np.array(positions) * unit.angstrom)
-    return local, kept_indices
+    return local, kept_indices, residue, fragment
+
+
+def _print_table(conjugate, residue, fragment, reference, graph_charge, charges):
+    """Print one line per atom of the site, and name the largest change."""
+    print(
+        f"{'residue':>8} {'atom':>6} {'ff14SB':>9} "
+        f"{'NAGL':>9} {'final':>9} {'delta':>9}"
+    )
+    largest = None
+    for index in sorted(residue) + sorted(fragment):
+        atom = conjugate.atom(index)
+        data = atom.metadata
+        label = f"{data['residue_name']}{data['residue_number']}"
+        library = reference.get(atom_key(atom))
+        if library is None:
+            library_text = delta_text = "-"
+        else:
+            delta = graph_charge[index] - library
+            library_text = format(library, "+.4f")
+            delta_text = format(delta, "+.4f")
+            if largest is None or abs(delta) > abs(largest[1]):
+                largest = (f"{label} {atom.name}", delta)
+        print(
+            f"{label:>8} {atom.name:>6} {library_text:>9} "
+            f"{graph_charge[index]:>+9.4f} {charges[index]:>+9.4f} {delta_text:>9}"
+        )
+    if largest is not None:
+        print(f"largest change {largest[1]:+.4f} e on {largest[0]}")
 
 
 def assign_split_charges(
     conjugate,
     unmodified_topology,
     fragment_resname,
-    site,
+    resnum,
+    chain_id,
     nagl_model="openff-gnn-am1bcc-0.1.0-rc.3.pt",
-    nagl_scope="fragment_and_residue",
     tolerance=1e-6,
 ):
     """Set the partial charges of the conjugate from the two charge models.
+
+    The site holds the fragment and the modified residue. Its atoms take the
+    graph charges of the local model, and every other atom takes its ff14SB
+    library charge. The seam between the two models lies on the peptide bonds
+    of the modified residue. The modified residue takes graph charges too,
+    because the attachment changed its chemistry and the ff14SB charges of
+    the standard residue no longer describe it.
 
     Parameters
     ----------
@@ -227,13 +248,10 @@ def assign_split_charges(
         The protein before the modification. It supplies the ff14SB charges.
     fragment_resname : str
         Residue name of the fragment.
-    site : dict
-        ``chain_id`` and ``residue_number`` of the modified residue.
+    resnum, chain_id : int, str
+        Residue number and chain of the modified residue.
     nagl_model : str, optional
         NAGL model file. The default is the am1bcc graph model.
-    nagl_scope : {'fragment_and_residue', 'fragment'}, optional
-        Atoms that take graph charges. The default also moves the modified
-        residue, because the acylation changes its electron distribution.
     tolerance : float, optional
         Largest accepted difference between the net charge and the formal
         charge, in elementary charge.
@@ -246,53 +264,58 @@ def assign_split_charges(
     Raises
     ------
     ValueError
-        If ``nagl_scope`` is unknown, if an out-of-scope atom has no ff14SB
-        charge, if the residual per atom is larger than 0.005 e, or if the
-        net charge misses the formal charge by more than ``tolerance``.
+        On a shared atom key, a missing ff14SB charge, a non-integer charge
+        sum outside the site, a residual per atom of the site above 0.005 e,
+        or a net charge off the formal charge by more than ``tolerance``.
     """
-    if nagl_scope not in ("fragment_and_residue", "fragment"):
-        raise ValueError(f"nagl_scope must name a known scope, not {nagl_scope!r}")
-
-    local, kept_indices = build_local_model(conjugate, site, fragment_resname)
-    NAGLToolkitWrapper().assign_partial_charges(
-        local, partial_charge_method=nagl_model
+    local, kept_indices, residue, fragment = build_local_model(
+        conjugate, fragment_resname, resnum, chain_id
     )
+    NAGLToolkitWrapper().assign_partial_charges(local, partial_charge_method=nagl_model)
     graph_charge = {
         index: local.partial_charges[order].m_as(unit.elementary_charge)
         for order, index in enumerate(kept_indices)
     }
 
-    residue, fragment = _selected_indices(conjugate, site, fragment_resname)
-    scope = fragment | residue if nagl_scope == "fragment_and_residue" else fragment
-
+    site = residue | fragment
     reference = library_charge_map(unmodified_topology)
-    keys = {}
+    seen = set()
     charges = np.zeros(conjugate.n_atoms)
     for index, atom in enumerate(conjugate.atoms):
         key = atom_key(atom)
-        if key in keys:
+        if key in seen:
             raise ValueError(f"two atoms of the conjugate share the key {key}")
-        keys[key] = index
-        if index in scope:
+        seen.add(key)
+        if index in site:
             charges[index] = graph_charge[index]
-            continue
-        if key not in reference:
+        elif key in reference:
+            charges[index] = reference[key]
+        else:
             raise ValueError(
-                f"atom {atom.name} of residue "
-                f"{atom.metadata['residue_name']}{atom.metadata['residue_number']} "
-                f"has no ff14SB charge; the unmodified topology does not hold it"
+                f"{_label(atom)} has no ff14SB charge; the unmodified topology "
+                "does not hold it"
             )
-        charges[index] = reference[key]
+
+    outside = np.ones(conjugate.n_atoms, dtype=bool)
+    outside[sorted(site)] = False
+    outside_charge = charges[outside].sum()
+    if abs(outside_charge - round(outside_charge)) > 1e-4:
+        raise ValueError(
+            f"the charges outside the site sum to {outside_charge:+.6f} e, which "
+            "is not an integer within 1e-4 e; an atom of a standard residue is "
+            "missing from the charge map, or the site is wrong"
+        )
 
     formal = conjugate.total_charge.m_as(unit.elementary_charge)
     residual = formal - charges.sum()
-    smear = residual / len(scope)
+    smear = residual / len(site)
     if abs(smear) > 0.005:
         raise ValueError(
-            f"the residual of {residual:+.6f} e over {len(scope)} atoms leaves "
-            f"{smear:+.6f} e per atom, which is more than the limit of 0.005 e"
+            f"the residual of {residual:+.6f} e over {len(site)} atoms leaves "
+            f"{smear:+.6f} e per atom, which is more than the limit of 0.005 e; "
+            "check the leaving atoms of the attachment and the atoms of the site"
         )
-    for index in scope:
+    for index in site:
         charges[index] += smear
 
     net = charges.sum()
@@ -301,35 +324,18 @@ def assign_split_charges(
             f"the net charge of {net:.9f} e misses the formal charge of "
             f"{formal:.1f} e by more than {tolerance:g} e"
         )
-    for key, index in keys.items():
-        if index in scope:
-            continue
-        if charges[index] != reference[key]:
-            raise ValueError(
-                f"atom {key} is out of scope but its charge moved by "
-                f"{charges[index] - reference[key]:+.9f} e"
-            )
 
-    label = f"{site['chain_id']}{site['residue_number']}"
-    print(f"charges of {label} and {fragment_resname}")
-    print(f"{'atom':>6} {'ff14SB':>9} {'NAGL':>9} {'final':>9}")
-    for index in sorted(residue):
-        atom = conjugate.atom(index)
-        key = atom_key(atom)
-        library = reference.get(key)
-        print(
-            f"{atom.name:>6} "
-            f"{'--' if library is None else format(library, '+.4f'):>9} "
-            f"{graph_charge[index]:>+9.4f} {charges[index]:>+9.4f}"
-        )
-    print(f"residual {residual:+.6f} e over {len(scope)} atoms")
+    site_name = conjugate.atom(min(residue)).metadata["residue_name"]
+    print(f"charges of {site_name}{resnum} and {fragment_resname}")
+    _print_table(conjugate, residue, fragment, reference, graph_charge, charges)
+    print(f"residual {residual:+.6f} e over {len(site)} atoms")
     print(f"per-atom smear {smear:+.6f} e | net charge {net:.9f} e")
 
     conjugate.partial_charges = charges * unit.elementary_charge
     return conjugate
 
 
-def build_interchange(
+def parameterize_with_preset_charges(
     conjugate_topology,
     charged_conjugate,
     forcefield_names=("ff14sb_off_impropers_0.0.4.offxml", "openff-2.3.0.offxml"),
@@ -353,10 +359,10 @@ def build_interchange(
     Raises
     ------
     ValueError
-        If the conjugate has no partial charges, if the topology does not
-        hold it, or if the charges of the system differ from the preset
-        array. The last check proves that the NAGLCharges handler of Sage
-        2.3.0 did not write over the split charges.
+        On a conjugate without partial charges, a topology that does not hold
+        it, or charges that differ from the preset array. The last check
+        proves that the NAGLCharges handler of Sage 2.3.0 did not write over
+        the split charges.
     """
     if charged_conjugate.partial_charges is None:
         raise ValueError("the conjugate carries no partial charges")
@@ -367,8 +373,7 @@ def build_interchange(
 
     start = None
     for molecule in conjugate_topology.molecules:
-        same_size = molecule.n_atoms == charged_conjugate.n_atoms
-        if molecule is charged_conjugate or same_size:
+        if molecule.n_atoms == charged_conjugate.n_atoms:
             start = conjugate_topology.atom_index(molecule.atom(0))
             break
     if start is None:
