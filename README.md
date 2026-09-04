@@ -35,7 +35,10 @@ steps:
    rigid placement, so the movie starts at the steric clash and shows
    the fragment settle. It takes about 15 s to compute.
 6. `save_pdb` writes the modified PDB file, and `bond_records()`
-   returns one plain dict per new bond.
+   returns one plain dict per new bond. `save_pdb` also writes the same
+   records to `<name>.bondrecords.json` next to the PDB file, and
+   `Protein(pdb, bond_records=...)` reads that pair back to reload the
+   modified protein.
 7. Those two outputs are all that OpenFF Pablo needs. From there the
    notebook assigns charges and parameters and runs a short solvated MD
    simulation in OpenMM.
