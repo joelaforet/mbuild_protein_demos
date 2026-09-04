@@ -46,12 +46,6 @@
           "leaving": false
         },
         {
-          "name": "O1",
-          "element": "O",
-          "formal_charge": 0,
-          "leaving": false
-        },
-        {
           "name": "C2",
           "element": "C",
           "formal_charge": 0,
@@ -90,6 +84,54 @@
         {
           "name": "C8",
           "element": "C",
+          "formal_charge": 0,
+          "leaving": false
+        },
+        {
+          "name": "H1",
+          "element": "H",
+          "formal_charge": 0,
+          "leaving": true
+        },
+        {
+          "name": "H10",
+          "element": "H",
+          "formal_charge": 0,
+          "leaving": false
+        },
+        {
+          "name": "H11",
+          "element": "H",
+          "formal_charge": 0,
+          "leaving": false
+        },
+        {
+          "name": "H12",
+          "element": "H",
+          "formal_charge": 0,
+          "leaving": false
+        },
+        {
+          "name": "H13",
+          "element": "H",
+          "formal_charge": 0,
+          "leaving": false
+        },
+        {
+          "name": "H14",
+          "element": "H",
+          "formal_charge": 0,
+          "leaving": false
+        },
+        {
+          "name": "H15",
+          "element": "H",
+          "formal_charge": 0,
+          "leaving": false
+        },
+        {
+          "name": "H16",
+          "element": "H",
           "formal_charge": 0,
           "leaving": false
         },
@@ -142,73 +184,116 @@
           "leaving": false
         },
         {
-          "name": "H10",
-          "element": "H",
+          "name": "O1",
+          "element": "O",
           "formal_charge": 0,
           "leaving": false
-        },
-        {
-          "name": "H11",
-          "element": "H",
-          "formal_charge": 0,
-          "leaving": false
-        },
-        {
-          "name": "H12",
-          "element": "H",
-          "formal_charge": 0,
-          "leaving": false
-        },
-        {
-          "name": "H13",
-          "element": "H",
-          "formal_charge": 0,
-          "leaving": false
-        },
-        {
-          "name": "H14",
-          "element": "H",
-          "formal_charge": 0,
-          "leaving": false
-        },
-        {
-          "name": "H15",
-          "element": "H",
-          "formal_charge": 0,
-          "leaving": false
-        },
-        {
-          "name": "H16",
-          "element": "H",
-          "formal_charge": 0,
-          "leaving": false
-        },
-        {
-          "name": "H1",
-          "element": "H",
-          "formal_charge": 0,
-          "leaving": true
         }
       ],
       "bonds": [
+        {
+          "atom1": "C1",
+          "atom2": "C2",
+          "order": 1.0
+        },
+        {
+          "atom1": "C1",
+          "atom2": "H1",
+          "order": 1
+        },
         {
           "atom1": "C1",
           "atom2": "O1",
           "order": 2.0
         },
         {
-          "atom1": "C1",
-          "atom2": "C2",
+          "atom1": "C2",
+          "atom2": "C3",
           "order": 1.0
         },
         {
-          "atom1": "H3",
-          "atom2": "C2",
+          "atom1": "C2",
+          "atom2": "H2",
           "order": 1.0
         },
         {
-          "atom1": "C8",
+          "atom1": "C2",
+          "atom2": "H3",
+          "order": 1.0
+        },
+        {
+          "atom1": "C3",
+          "atom2": "C4",
+          "order": 1.0
+        },
+        {
+          "atom1": "C3",
+          "atom2": "H4",
+          "order": 1.0
+        },
+        {
+          "atom1": "C3",
+          "atom2": "H5",
+          "order": 1.0
+        },
+        {
+          "atom1": "C4",
+          "atom2": "C5",
+          "order": 1.0
+        },
+        {
+          "atom1": "C4",
+          "atom2": "H6",
+          "order": 1.0
+        },
+        {
+          "atom1": "C4",
+          "atom2": "H7",
+          "order": 1.0
+        },
+        {
+          "atom1": "C5",
+          "atom2": "C6",
+          "order": 1.0
+        },
+        {
+          "atom1": "C5",
+          "atom2": "H8",
+          "order": 1.0
+        },
+        {
+          "atom1": "C5",
+          "atom2": "H9",
+          "order": 1.0
+        },
+        {
+          "atom1": "C6",
           "atom2": "C7",
+          "order": 1.0
+        },
+        {
+          "atom1": "C6",
+          "atom2": "H10",
+          "order": 1.0
+        },
+        {
+          "atom1": "C6",
+          "atom2": "H11",
+          "order": 1.0
+        },
+        {
+          "atom1": "C7",
+          "atom2": "C8",
+          "order": 1.0
+        },
+        {
+          "atom1": "C7",
+          "atom2": "H12",
+          "order": 1.0
+        },
+        {
+          "atom1": "C7",
+          "atom2": "H13",
           "order": 1.0
         },
         {
@@ -225,91 +310,6 @@
           "atom1": "C8",
           "atom2": "H16",
           "order": 1.0
-        },
-        {
-          "atom1": "H7",
-          "atom2": "C4",
-          "order": 1.0
-        },
-        {
-          "atom1": "H10",
-          "atom2": "C6",
-          "order": 1.0
-        },
-        {
-          "atom1": "H4",
-          "atom2": "C3",
-          "order": 1.0
-        },
-        {
-          "atom1": "H12",
-          "atom2": "C7",
-          "order": 1.0
-        },
-        {
-          "atom1": "C4",
-          "atom2": "C3",
-          "order": 1.0
-        },
-        {
-          "atom1": "C4",
-          "atom2": "C5",
-          "order": 1.0
-        },
-        {
-          "atom1": "C4",
-          "atom2": "H6",
-          "order": 1.0
-        },
-        {
-          "atom1": "C6",
-          "atom2": "C5",
-          "order": 1.0
-        },
-        {
-          "atom1": "C6",
-          "atom2": "C7",
-          "order": 1.0
-        },
-        {
-          "atom1": "C6",
-          "atom2": "H11",
-          "order": 1.0
-        },
-        {
-          "atom1": "C2",
-          "atom2": "C3",
-          "order": 1.0
-        },
-        {
-          "atom1": "C2",
-          "atom2": "H2",
-          "order": 1.0
-        },
-        {
-          "atom1": "H13",
-          "atom2": "C7",
-          "order": 1.0
-        },
-        {
-          "atom1": "H5",
-          "atom2": "C3",
-          "order": 1.0
-        },
-        {
-          "atom1": "H9",
-          "atom2": "C5",
-          "order": 1.0
-        },
-        {
-          "atom1": "H8",
-          "atom2": "C5",
-          "order": 1.0
-        },
-        {
-          "atom1": "C1",
-          "atom2": "H1",
-          "order": 1
         }
       ],
       "linking": null,
