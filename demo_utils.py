@@ -170,7 +170,9 @@ class _TextFrames(Structure, Trajectory):
 def _pdb_text(source, scratch=SCRATCH_PDB):
     """Return PDB text from a Protein, a file path, or PDB text."""
     if hasattr(source, "save_pdb"):
-        source.save_pdb(scratch, overwrite=True)
+        # The frame goes to PyMOL and NGL for visualization only, so it
+        # needs no bond-records file.
+        source.save_pdb(scratch, overwrite=True, write_bond_records=False)
         source = scratch
     text = str(source)
     if "\n" not in text:
@@ -583,7 +585,9 @@ def save_gif(view, frames, path, duration=120, loop=0):
 # ----------------------------------------------------------------------
 def _capture(protein, scratch):
     """Return the current atom lines and the CONECT footer."""
-    protein.save_pdb(scratch, overwrite=True)
+    # The frame goes to PyMOL and NGL for visualization only, so it needs
+    # no bond-records file.
+    protein.save_pdb(scratch, overwrite=True, write_bond_records=False)
     with open(scratch) as handle:
         lines = handle.read().splitlines()
     atoms = [line for line in lines if line.startswith(("ATOM", "HETATM", "TER"))]
