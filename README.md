@@ -4,13 +4,10 @@
 [mBuild](https://github.com/mosdef-hub/mbuild), then hand off to the
 parameterization engine of your choice.**
 
-Two notebooks tell the whole story.
-
 **`01_load_and_export.ipynb` — load and export.** A protonated protein
-PDB file becomes an mBuild `Compound` tree with full chemistry: every
-atom identified against a Chemical Component Dictionary template, bonds
-with orders, residues with formal charges and real PDB numbers. Nothing
-is guessed. An atom that the templates cannot explain raises an error
+PDB file becomes an mBuild `Compound`: every
+atom is matched against a Chemical Component Dictionary template, bonds
+with correct bond orders, and residues with formal charges. An atom that the templates cannot explain raises an error
 that names the residue and the fix. The same object then exports to
 **GMSO**, **ParmEd**, **RDKit**, a prepared **PDB** file, and **OpenFF**.
 
@@ -47,9 +44,8 @@ An appendix repeats the mBuild half with a 106-atom sulfonated cyanine
 FRET dye, to show that nothing in the workflow depends on the size of
 the fragment.
 
-mBuild owns the coordinates. The force-field assignment is downstream on
-purpose: MosDef ships no biopolymer force field yet, so the demo uses
-OpenFF for that step.
+mBuild is responsible for coordinate and topology generation. Assigning a force field happens in another package. Here, we demonstrate with
+OpenFF.
 
 ## Charges and parameters
 
@@ -68,13 +64,6 @@ The parameters come from the Amber **ff14SB** port plus **Sage 2.3.0**
 preset charges, and the notebook reads them back out of the Interchange
 to prove that the NAGLCharges handler of Sage 2.3.0 did not write over
 them.
-
-The split claims no more than that. The two sets come from different
-fits, so the atoms across the seam are not mutually polarized, and the
-library charges of the neighbouring residues do not respond to the
-modification. NAGL am1bcc is the model that runs today. A different
-graph model, such as AshGC, would take the place of NAGL in the same
-call.
 
 ## Files
 
@@ -118,7 +107,9 @@ pixi run lab
 This starts JupyterLab **inside the pixi environment**, with both
 notebooks open. The default `Python 3 (ipykernel)` kernel of this
 JupyterLab *is* the tutorial environment, so you do not need to switch
-kernels. (If you use an external Jupyter or VS Code instead, register
+kernels. 
+
+**(If you use an external Jupyter or VS Code instead**, register
 the environment as a named kernel once:
 `pixi run python -m ipykernel install --user --name mbuild-protein-demos`,
 then select `mbuild-protein-demos` in the kernel picker.)
@@ -146,12 +137,7 @@ notebooks means the demo runs end to end.
 - The movie exports to an animated GIF only when the environment
   variable `DEMO_RENDER` is set. NGLView asks the browser for each
   picture, so the export needs a live front end.
-- **More demos** live on the
-  [`showcase-extras`](../../tree/showcase-extras) branch: one polymer
-  tethered at several protein sites, glycans from GLYCAM PDB files,
-  branched sugars from SMILES, mixed force fields, and a PyMOL placement
-  movie.
 
 > The notebooks track the `feat/scope-trim` branch of
 > [joelaforet/mbuild](https://github.com/joelaforet/mbuild), proposed
-> upstream to mosdef-hub/mbuild.
+> upstream to mosdef-hub/mbuild. I am still working on streamlining the PR.
