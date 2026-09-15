@@ -15,7 +15,7 @@ that names the residue and the fix. The same object then exports to
 steps:
 
 1. Load the protein.
-2. Build a fragment from scratch as star-sited SMILES. The `*` marks
+2. Build a fragment from scratch as star-sited SMILES (mBuild compound with labelled ports). The `*` marks
    the atom that forms the bond.
 3. `protein.deprotonate(...)` takes the acidic proton off the
    attachment site. A protonated lysine side chain has no lone pair, so
