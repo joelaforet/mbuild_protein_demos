@@ -46,9 +46,19 @@ pip = "*"
 setuptools = "<81"
 
 [tasks]
-# Installs the mBuild biopolymers branch and openff-pablo into this
-# environment. Run once after `pixi install`. Needs network: the KUT and
-# AIB residue templates are downloaded on first use and then cached.
+# Installs mBuild and openff-pablo, then caches the two residue
+# templates the semaglutide notebook needs. Run once after
+# `pixi install`. Needs network; after it succeeds the demo runs offline.
+#
+# The contribution is a stack of branches on the fork, each one a review
+# layer on top of the previous. feat/biopolymers-docs is the tip, so it
+# contains every layer; installing from it gets the whole thing. The
+# branches only have to exist on the fork — whether their pull requests
+# are open, draft, or not yet opened makes no difference to pip.
+#
+# To pin the demo to an exact commit, for a talk or a bisect, replace the
+# branch with a SHA:
+#   "git+https://github.com/joelaforet/mbuild.git@ffbf083c"
 setup = """pip install --no-deps \
   "git+https://github.com/joelaforet/mbuild.git@feat/biopolymers-docs" \
   "git+https://github.com/openforcefield/openff-pablo.git@v0.2.2" && \
