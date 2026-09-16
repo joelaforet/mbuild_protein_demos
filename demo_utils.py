@@ -21,10 +21,12 @@ Three groups of functions:
   call the mBuild API themselves.
 """
 
+import json
 import logging
 import os
 
 import nglview
+import ipywidgets as widgets
 import numpy as np
 from nglview.base_adaptor import Structure, Trajectory
 
@@ -172,7 +174,7 @@ def _pdb_text(source, scratch=SCRATCH_PDB):
     if hasattr(source, "save_pdb"):
         # The frame goes to PyMOL and NGL for visualization only, so it
         # needs no bond-records file.
-        source.save_pdb(scratch, overwrite=True, write_bond_records=False)
+        source.save_pdb(scratch, overwrite=True)
         source = scratch
     text = str(source)
     if "\n" not in text:
@@ -327,6 +329,63 @@ def _resolve_selections(protein, link_selection, fragment_selection):
     )
 
 
+def _respect_fragment_connections(view, text):
+    """Keep explicit fragment crosslinks and remove NGL's proximity guesses.
+
+    NGL supplements CONECT with distance-based bonds between nonstandard
+    residues and nearby atoms. Frame zero can contain clashes, so those
+    guesses can produce false lysine-fragment bonds. Only fragments covered
+    by CONECT are filtered; ordinary protein bond perception is retained.
+    """
+    hetero = set()
+    explicit = set()
+    connected = set()
+    for line in text.splitlines():
+        if line.startswith("HETATM"):
+            hetero.add(int(line[6:11]))
+        elif line.startswith("CONECT"):
+            serials = [int(line[i : i + 5]) for i in range(6, len(line.rstrip()), 5)]
+            connected.update(serials)
+            explicit.update(
+                f"{min(serials[0], other)}:{max(serials[0], other)}"
+                for other in serials[1:]
+            )
+    fragment_atoms = hetero & connected
+    if not fragment_atoms:
+        return
+    # This callback runs after the component loads, before styling. It only
+    # changes the view's bond graph; the protein and movie data stay intact.
+    view._execute_js_code(
+        """
+        const structure = this.stage.compList[0].structure;
+        const explicit = new Set(EXPLICIT);
+        const fragment = new Set(FRAGMENT);
+        const store = structure.bondStore;
+        const a = structure.getAtomProxy(), b = structure.getAtomProxy();
+        const seen = new Set();
+        let count = 0;
+        for (let i = 0; i < store.count; i++) {
+            a.index = store.atomIndex1[i]; b.index = store.atomIndex2[i];
+            const serialKey = Math.min(a.serial, b.serial) + ":" + Math.max(a.serial, b.serial);
+            const atomKey = Math.min(a.index, b.index) + ":" + Math.max(a.index, b.index);
+            const crossesFragment = a.residueIndex !== b.residueIndex &&
+                (fragment.has(a.serial) || fragment.has(b.serial));
+            if (seen.has(atomKey) || (crossesFragment && !explicit.has(serialKey))) continue;
+            seen.add(atomKey);
+            store.atomIndex1[count] = a.index;
+            store.atomIndex2[count] = b.index;
+            store.bondOrder[count] = store.bondOrder[i];
+            count++;
+        }
+        store.count = count;
+        structure.finalizeBonds();
+        structure.refreshPosition();
+    """.replace("EXPLICIT", json.dumps(sorted(explicit))).replace(
+            "FRAGMENT", json.dumps(sorted(fragment_atoms))
+        )
+    )
+
+
 def _style_view(view, link_selection, fragment_selection):
     """Draw a grey cartoon, cyan linkage sticks and green fragment sticks.
 
@@ -342,8 +401,8 @@ def _style_view(view, link_selection, fragment_selection):
     so the cartoon leaves the fragment out. The stick representation on
     the fragment selection is the only drawing of the fragment.
 
-    NGL holds no template for a fragment residue, so it finds the bonds
-    inside that residue by interatomic distance.
+    The PDB CONECT records supply the covalent crosslink. A single stick
+    representation includes both ends, with colors assigned by selection.
 
     Parameters
     ----------
@@ -356,14 +415,23 @@ def _style_view(view, link_selection, fragment_selection):
     """
     view.clear_representations()
     view.add_representation("cartoon", selection="protein", color=PROTEIN_COLOR)
-    if link_selection:
-        view.add_representation("licorice", selection=link_selection, color=LINK_COLOR)
-    if fragment_selection:
+    selections = [term for term in (link_selection, fragment_selection) if term]
+    if selections:
+        # NGL only draws a bond when both endpoints belong to the same
+        # representation. Separate residue representations hide the crosslink.
+        colors = []
+        if fragment_selection:
+            colors.append([FRAGMENT_COLOR, fragment_selection])
+        if link_selection:
+            colors.append([LINK_COLOR, link_selection])
+        colors.append([PROTEIN_COLOR, "*"])
+        scheme = nglview.color._ColorScheme(colors, f"modification_{view.model_id}")
         view.add_representation(
-            "licorice", selection=fragment_selection, color=FRAGMENT_COLOR
+            "licorice",
+            selection=" or ".join(f"({term})" for term in selections),
+            color=scheme,
         )
-        # The modification is the subject of the picture, so the view
-        # centers on it.
+    if fragment_selection:
         view.center(selection=fragment_selection)
 
 
@@ -416,6 +484,7 @@ def show_protein(
     protein = source if hasattr(source, "bond_records") else None
     text = _pdb_text(source)
     view = nglview.NGLWidget(nglview.TextStructure(text, ext="pdb"))
+    _respect_fragment_connections(view, text)
     _style_view(view, *_resolve_selections(protein, link_selection, fragment_selection))
     view.layout.width = width
     view.layout.height = height
@@ -461,6 +530,50 @@ def _split_models(text):
     return frame_text, frames
 
 
+class MovieView(widgets.VBox):
+    """NGL canvas with permanently visible playback and frame controls."""
+
+    def __init__(self, ngl_widget):
+        self.ngl_widget = ngl_widget
+        self.play = widgets.Play(min=0, max=ngl_widget.max_frame, interval=100)
+        self.slider = widgets.IntSlider(
+            min=0,
+            max=ngl_widget.max_frame,
+            description="Frame",
+            continuous_update=True,
+            layout=widgets.Layout(width="400px"),
+        )
+        # Keep links alive and run them in the browser, including playback.
+        self._links = [
+            widgets.jslink((self.play, "value"), (self.slider, "value")),
+            widgets.jslink((self.slider, "value"), (ngl_widget, "frame")),
+        ]
+        super().__init__([ngl_widget, widgets.HBox([self.play, self.slider])])
+
+    @property
+    def frame(self):
+        return self.ngl_widget.frame
+
+    @frame.setter
+    def frame(self, value):
+        self.ngl_widget.frame = value
+
+
+class RelaxationMovie(tuple):
+    """Unpackable movie data that displays a player as a cell's last expression."""
+
+    def __new__(cls, path, frames, energies, protein):
+        result = super().__new__(cls, (path, frames, energies))
+        result.protein = protein
+        result._view = None
+        return result
+
+    def _repr_mimebundle_(self, **kwargs):
+        if self._view is None:
+            self._view = show_movie(self, protein=self.protein)
+        return self._view._repr_mimebundle_(**kwargs)
+
+
 def show_movie(
     source,
     protein=None,
@@ -495,21 +608,24 @@ def show_movie(
 
     Returns
     -------
-    nglview.NGLWidget
-        Press play in the widget to run the movie. Under nbconvert
+    MovieView
+        Press play below the canvas or drag the frame slider. Under nbconvert
         there is no front end, so the widget shows as a placeholder and
         the cell still succeeds.
     """
+    if protein is None and isinstance(source, RelaxationMovie):
+        protein = source.protein
     if isinstance(source, (str, os.PathLike)):
         frame_text, frames = _split_models(_pdb_text(source))
     else:
         path, frames = source[0], np.asarray(source[1])
         frame_text, _ = _split_models(_pdb_text(path))
     view = nglview.NGLWidget(_TextFrames(frame_text, frames))
+    _respect_fragment_connections(view, frame_text)
     _style_view(view, *_resolve_selections(protein, link_selection, fragment_selection))
     view.layout.width = width
     view.layout.height = height
-    return view
+    return MovieView(view)
 
 
 def save_gif(view, frames, path, duration=120, loop=0):
@@ -524,7 +640,7 @@ def save_gif(view, frames, path, duration=120, loop=0):
 
     Parameters
     ----------
-    view : nglview.NGLWidget
+    view : MovieView or nglview.NGLWidget
         A displayed movie widget, as returned by ``show_movie``.
     frames : int or array_like
         The number of frames, or the frame array whose length is that
@@ -555,6 +671,7 @@ def save_gif(view, frames, path, duration=120, loop=0):
 
     from PIL import Image
 
+    view = getattr(view, "ngl_widget", view)
     n_frames = frames if isinstance(frames, int) else len(frames)
     images = []
     for index in range(n_frames):
@@ -587,7 +704,7 @@ def _capture(protein, scratch):
     """Return the current atom lines and the CONECT footer."""
     # The frame goes to PyMOL and NGL for visualization only, so it needs
     # no bond-records file.
-    protein.save_pdb(scratch, overwrite=True, write_bond_records=False)
+    protein.save_pdb(scratch, overwrite=True)
     with open(scratch) as handle:
         lines = handle.read().splitlines()
     atoms = [line for line in lines if line.startswith(("ATOM", "HETATM", "TER"))]
@@ -668,11 +785,12 @@ def relax_movie(
 
     Returns
     -------
-    tuple of (str, numpy.ndarray, numpy.ndarray)
+    RelaxationMovie
         The path written, the frames as an (n_frames, n_atoms, 3) array
         in Angstrom, and the potential energy in kJ/mol after each
         minimization (``n_frames - 1`` values). Pass the whole tuple to
-        ``show_movie``.
+        ``show_movie``. As the last expression of a live notebook cell, the
+        result also displays its own player with play/pause and a slider.
     """
     from mbuild.simulation import OpenMMSimulation
 
@@ -725,4 +843,6 @@ def relax_movie(
     energies = np.array(
         [entry["potential_energy"] for entry in simulation.energies], dtype=float
     )
-    return out_path, np.array(frames, dtype=np.float32), energies
+    return RelaxationMovie(
+        out_path, np.array(frames, dtype=np.float32), energies, protein
+    )
