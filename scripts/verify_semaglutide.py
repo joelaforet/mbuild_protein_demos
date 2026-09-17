@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from openff.pablo import STD_CCD_CACHE, topology_from_pdb
 
-from demo_fragments import fragment_from_ccd
+from mbuild.biopolymers import fragment_from_ccd
 from mbuild.biopolymers import Protein
 
 APO = "semaglutide_apo.pdb"
