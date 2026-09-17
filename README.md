@@ -38,7 +38,8 @@ pixi run prove
 
 `evidence/` holds six short notebooks, one per claim made in the pull
 request descriptions. Each states the claim in a line and proves it in
-the code below, with nothing hidden in a helper.
+the code below, with nothing hidden in a helper. Run one to see its
+output; the committed copies carry none.
 
 | | |
 | --- | --- |
@@ -98,11 +99,10 @@ coordinates is what makes such a disagreement visible at all.
 | | Installs from `feat/biopolymers-docs`, the tip of the review stack on the fork, which contains every layer. Swap the branch for a commit SHA to pin a talk to an exact build. |
 | `pixi run prove` | Build the structure and check it against the reference. No notebook. |
 | `pixi run lab` | Open the notebooks. |
-| `pixi run verify` | Execute all three notebooks headless. |
+| `pixi run verify` | Execute every notebook headless into `assets_cache/executed/`. The committed notebooks carry no outputs. |
 | `pixi run dev` | Point the environment at a local mBuild checkout. |
 | `pixi run fetch` / `assets` | Re-download the workshop file and rebuild the committed structures. |
-| `pixi run notebooks` | Regenerate notebooks 01 and 02 from `scripts/make_notebooks.py`. |
-| `pixi run evidence` | Regenerate and execute the evidence notebooks from `scripts/make_evidence.py`. Downloads Pablo's 9 MB corpus once. |
+| `pixi run clean` | Clear notebook outputs in place before committing. |
 
 ## Force fields
 
