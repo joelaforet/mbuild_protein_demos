@@ -117,6 +117,5 @@ and the small residual spread over the atoms of that site. The two sets
 come from different fits, so atoms across the seam are not mutually
 polarized. See `docs/charge-splitting.md`.
 
-mBuild owns the structure. The force field assignment is downstream on
-purpose: MosDef ships no biopolymer force field, so the OpenFF ecosystem
-takes that step.
+mBuild is responsible for the structure and the topology. Assigning a
+force field happens in another package. Here that package is OpenFF.
