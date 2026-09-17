@@ -22,6 +22,8 @@ scipy = "*"
 networkx = "*"
 treelib = "*"
 hoomd = ">=4"
+# the generic PDB loader mb.load uses, for the comparison in evidence/
+mdtraj = ">=1.11.1,<2"
 # simulation + preparation
 openmm = "*"
 pdbfixer = "*"
@@ -89,3 +91,9 @@ lab = "jupyter lab 01_load_and_export.ipynb 02_semaglutide.ipynb"
 # hundred kB of diff per run.
 verify = "jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=1800 --ExecutePreprocessor.store_widget_state=False 01_load_and_export.ipynb 02_semaglutide.ipynb 03_extensions.ipynb"
 charges = "python verify_charges.py"
+# Regenerates and executes the evidence notebooks in evidence/. Each one
+# backs a claim made in the pull request descriptions. The corpus notebook
+# downloads about 10 MB from openff-pablo's repository the first time.
+evidence = """python scripts/make_evidence.py && \
+cd evidence && jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=1800 \
+loader_bond_orders.ipynb pablo_corpus.ipynb pdb_round_trip.ipynb multi_residue_fragment.ipynb deprotonate_then_attach.ipynb"""

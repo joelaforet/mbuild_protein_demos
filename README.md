@@ -34,6 +34,20 @@ pixi run prove
 | `02_semaglutide.ipynb` | The demo. Attach the lipid linker to a lysine, write the PDB, read it with Pablo, check it against the workshop's structure, parameterize and simulate. |
 | `03_extensions.ipynb` | Fragments the CCD does not define, relaxing a fragment that lands in a clash, splitting partial charges across the modification site, and a 106-atom FRET dye. |
 
+## The evidence notebooks
+
+`evidence/` holds five short notebooks, one per claim made in the pull
+request descriptions. Each states the claim in a line and proves it in
+the code below, with nothing hidden in a helper.
+
+| | |
+| --- | --- |
+| `loader_bond_orders.ipynb` | `mb.load` gives every bond order 0.0 and no atom a charge. `Protein` gives 53 double bonds and a net charge of -1 on the same file. |
+| `pablo_corpus.ipynb` | 18 of the 26 files in openff-pablo's prepared PDB corpus load. Each refusal names the residue, and Pablo's verdict on the same files is shown. |
+| `pdb_round_trip.ipynb` | Lysozyme written by `save_pdb` has 8 `CONECT` lines, one per disulfide end, and Pablo reads it with no arguments. |
+| `multi_residue_fragment.ipynb` | A 31-residue peptide attached to a lysine keeps every residue's name, atoms and charge, and one bond record is enough for Pablo to read the product. |
+| `deprotonate_then_attach.ipynb` | Attaching to a charged lysine keeps the +1. Deprotonating first gives the neutral product. |
+
 ## What needed new code
 
 A PDB file carries elements and coordinates. Assigning force field
@@ -87,6 +101,7 @@ coordinates is what makes such a disagreement visible at all.
 | `pixi run dev` | Point the environment at a local mBuild checkout. |
 | `pixi run fetch` / `assets` | Re-download the workshop file and rebuild the committed structures. |
 | `pixi run notebooks` | Regenerate notebooks 01 and 02 from `scripts/make_notebooks.py`. |
+| `pixi run evidence` | Regenerate and execute the evidence notebooks from `scripts/make_evidence.py`. Downloads Pablo's 9 MB corpus once. |
 
 ## Force fields
 
