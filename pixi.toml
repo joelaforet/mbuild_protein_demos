@@ -96,4 +96,4 @@ charges = "python verify_charges.py"
 # downloads about 10 MB from openff-pablo's repository the first time.
 evidence = """python scripts/make_evidence.py && \
 cd evidence && jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=1800 \
-loader_bond_orders.ipynb pablo_corpus.ipynb pdb_round_trip.ipynb multi_residue_fragment.ipynb deprotonate_then_attach.ipynb"""
+loader_bond_orders.ipynb pablo_corpus.ipynb pdb_round_trip.ipynb multi_residue_fragment.ipynb deprotonate_then_attach.ipynb glycan_from_pdb.ipynb"""

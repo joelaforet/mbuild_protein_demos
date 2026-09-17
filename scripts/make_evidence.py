@@ -393,12 +393,97 @@ report("deprotonate, then attach", protein)
 ]
 
 
+GLYCAN = [
+    md(
+        """
+# N-glycosylation from a GLYCAM PDB file
+
+Three glycans built by GLYCAM-Web, each ending in a hydroxyl residue (`ROH`)
+on the anomeric carbon. `fragment_from_pdb` reads each file with its
+residues intact. `attach` bonds the anomeric carbon to ND2 of asparagine 60
+of ubiquitin. Naming `O1` as the fragment's leaving atom removes the whole
+hydroxyl, so `ROH` disappears and the GLYCAM residue names survive into the
+written file, which is what a force field like GLYCAM06 keys on.
+"""
+    ),
+    code(QUIET),
+    code(
+        """
+from collections import Counter
+from pathlib import Path
+
+from mbuild.biopolymers import Protein, fragment_from_pdb
+
+glycan = fragment_from_pdb("../glycans/glycam_G57321FI.pdb")
+print([(residue.name, residue.resnum) for residue in glycan.children], glycan.n_particles, "atoms")
+print("bond orders:", dict(Counter(d["bond_order"] for *_, d in glycan.bonds(return_bond_order=True))))
+"""
+    ),
+    md(
+        """
+Asparagine's amide nitrogen is neutral, so unlike a lysine it needs no
+`deprotonate` first. `attach` removes one ND2 hydrogen itself.
+"""
+    ),
+    code(
+        """
+protein = Protein("../1ubq_protonated.pdb")
+protein.attach(
+    glycan,
+    fragment_atom_name="C1",
+    fragment_resnum=2,
+    resnum=60,
+    atom_name="ND2",
+    leaving_atom_names="HD22",
+    fragment_leaving_atom_names="O1",
+)
+record, = protein.bond_records()
+record
+"""
+    ),
+    code(
+        """
+print([(r.name, r.resnum, r.hetatm) for r in protein.residues()][75:])
+print(protein.n_particles, "atoms: 1231 protein + 30 glycan - HD22 - O1 - HO1 =", 1231 + 30 - 3)
+"""
+    ),
+    md("The same call for all three glycans, checking the written file each time."),
+    code(
+        """
+out = Path("../assets_cache")
+for name in ("glycam_G57321FI", "glycam_G42666HT", "glycam_G15407YE"):
+    glycan = fragment_from_pdb(f"../glycans/{name}.pdb")
+    protein = Protein("../1ubq_protonated.pdb")
+    protein.attach(glycan, fragment_atom_name="C1", fragment_resnum=2, resnum=60, atom_name="ND2",
+                   leaving_atom_names="HD22", fragment_leaving_atom_names="O1")
+    written = out / f"1ubq_{name}.pdb"
+    protein.save_pdb(written, overwrite=True)
+    lines = written.read_text().splitlines()
+    hetero = sorted({(line[17:20], int(line[22:26])) for line in lines if line.startswith("HETATM")}, key=lambda t: t[1])
+    in_file = [(r.name, r.resnum) for r in glycan.children if r.name != "ROH"]
+    print(f"{name}: {[r.name for r in glycan.children]} -> file has {hetero}, ROH present: {'ROH' in written.read_text()}")
+    assert [name for name, _ in hetero] == [name for name, _ in in_file]
+"""
+    ),
+    md("Every atom of the product carries a bond order and a formal charge, so it exports."),
+    code(
+        """
+from openff.toolkit import Molecule
+
+molecule = Molecule.from_rdkit(protein.to_rdkit(), allow_undefined_stereo=True)
+print(molecule.n_atoms, "atoms, net charge", molecule.total_charge)
+"""
+    ),
+]
+
+
 NOTEBOOKS = {
     "loader_bond_orders.ipynb": LOADER,
     "pablo_corpus.ipynb": CORPUS,
     "pdb_round_trip.ipynb": ROUND_TRIP,
     "multi_residue_fragment.ipynb": MULTI,
     "deprotonate_then_attach.ipynb": DEPROTONATE,
+    "glycan_from_pdb.ipynb": GLYCAN,
 }
 
 

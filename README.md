@@ -36,7 +36,7 @@ pixi run prove
 
 ## The evidence notebooks
 
-`evidence/` holds five short notebooks, one per claim made in the pull
+`evidence/` holds six short notebooks, one per claim made in the pull
 request descriptions. Each states the claim in a line and proves it in
 the code below, with nothing hidden in a helper.
 
@@ -47,6 +47,7 @@ the code below, with nothing hidden in a helper.
 | `pdb_round_trip.ipynb` | Lysozyme written by `save_pdb` has 8 `CONECT` lines, one per disulfide end, and Pablo reads it with no arguments. |
 | `multi_residue_fragment.ipynb` | A 31-residue peptide attached to a lysine keeps every residue's name, atoms and charge, and one bond record is enough for Pablo to read the product. |
 | `deprotonate_then_attach.ipynb` | Attaching to a charged lysine keeps the +1. Deprotonating first gives the neutral product. |
+| `glycan_from_pdb.ipynb` | Three GLYCAM-Web glycans read with `fragment_from_pdb`, N-linked to ASN60 of ubiquitin with the ROH hydroxyl as the leaving group. The GLYCAM residue names survive into the written file. |
 
 ## What needed new code
 
