@@ -4,26 +4,29 @@
 [mBuild](https://github.com/mosdef-hub/mbuild), and read it straight into
 OpenFF with [Pablo](https://github.com/openforcefield/openff-pablo).**
 
-Notebook 02 builds semaglutide's modified chain A — the structure the
-OpenFF post-translational-modification workshop simulates — and reads it
-back with the workshop's own loader call, unchanged. No hand-written
-residue definition, no companion file.
+Notebook 01 loads a protein with its chemistry intact, notebook 02 puts a
+fragment written as SMILES onto it and takes the result through OpenFF to a
+short simulation, and notebook 05 rebuilds semaglutide's modified chain A,
+the structure the OpenFF post-translational-modification workshop
+simulates, and reads it back with the workshop's own loader call,
+unchanged. Notebooks 03 and 04, point mutations and reactions given as a
+string, join from a second branch.
 
 ```
 pixi install && pixi run setup
 pixi run lab
 ```
 
-Open notebook 02 and run it top to bottom. Every check it makes against
-the workshop's structure is written out in the notebook itself.
+Open notebook 01 and go in order. Every check a notebook makes is written
+out in the notebook itself.
 
 ## The notebooks
 
 | | |
 | --- | --- |
 | `01_load_and_export.ipynb` | Read a protein with its chemistry intact, and hand it to OpenFF. Why template matching rather than distance-based bond perception. |
-| `02_semaglutide.ipynb` | The demo. Attach the lipid linker to a lysine, write the PDB, read it with Pablo, check it against the workshop's structure, parameterize and simulate. |
-| `03_extensions.ipynb` | Fragments the CCD does not define, relaxing a fragment that lands in a clash, splitting partial charges across the modification site, and a 106-atom FRET dye. |
+| `02_modify_a_protein.ipynb` | The `attach` tutorial. A fragment from star-marked SMILES, deprotonate the site, attach, relax the clash as a movie, write the PDB and bond records, build the Pablo definition and crosslink in the open, split the partial charges, simulate. |
+| `05_semaglutide.ipynb` | The case study. Attach the lipid linker from its CCD component to a lysine, write the PDB, read it with Pablo with no hand-written definition, check it against the workshop's structure, parameterize and simulate. |
 
 ## The evidence notebooks
 

@@ -86,9 +86,9 @@ assets = "python scripts/build_assets.py"
 # openff-pablo's repository the first time.
 verify = """jupyter nbconvert --to notebook --execute --ExecutePreprocessor.timeout=1800 \
 --ExecutePreprocessor.store_widget_state=False --output-dir assets_cache/executed \
-01_load_and_export.ipynb 02_semaglutide.ipynb 03_extensions.ipynb && \
+01_load_and_export.ipynb 02_modify_a_protein.ipynb 05_semaglutide.ipynb && \
 cd evidence && jupyter nbconvert --to notebook --execute --ExecutePreprocessor.timeout=1800 \
 --output-dir ../assets_cache/executed/evidence *.ipynb"""
 # Clears outputs in place before a commit.
-clean = "jupyter nbconvert --clear-output --inplace 01_load_and_export.ipynb 02_semaglutide.ipynb 03_extensions.ipynb evidence/*.ipynb"
+clean = "jupyter nbconvert --clear-output --inplace 01_load_and_export.ipynb 02_modify_a_protein.ipynb 05_semaglutide.ipynb evidence/*.ipynb"
 charges = "python verify_charges.py"

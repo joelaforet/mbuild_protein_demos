@@ -14,11 +14,11 @@ Three groups of functions:
   branch.
 - Geometry: ``relax_movie`` minimizes the attached fragments in small
   steps and records one movie frame per step.
-- OpenFF handoff: ``pablo_residue_library`` and
-  ``pablo_crosslink_kwargs`` turn one attachment into the residue
-  definition and crosslink declaration that openff-pablo needs. They
-  wrap openff-pablo and RDKit calls, not mBuild calls: the notebooks
-  call the mBuild API themselves.
+
+The OpenFF hand-off, the residue definition and the crosslink declaration
+that openff-pablo needs, is written out in the notebooks themselves, so
+that the reader sees every step. The notebooks call the mBuild API
+themselves too.
 """
 
 import json
@@ -36,89 +36,6 @@ logger = logging.getLogger(__name__)
 # file, so the display helpers write and read this path instead of
 # holding a PDB string in memory.
 SCRATCH_PDB = "_frame.pdb"
-
-
-# ----------------------------------------------------------------------
-# OpenFF handoff
-# ----------------------------------------------------------------------
-def pablo_crosslink_kwargs(record):
-    """Format one Protein.bond_records() entry for with_crosslink."""
-    names = record["residue_names"]
-    atoms = record["atom_names"]
-    leaving = record["leaving_atoms"]
-    if names[0] == names[1] and atoms[0] == atoms[1] and leaving[0] == leaving[1]:
-        return {
-            "residues": [names[0]],
-            "linking_atoms": [atoms[0]],
-            "leaving_atoms": [list(leaving[0])],
-            "bond_order": record["bond_order"],
-        }
-    return {
-        "residues": list(names),
-        "linking_atoms": list(atoms),
-        "leaving_atoms": [list(side) for side in leaving],
-        "bond_order": record["bond_order"],
-    }
-
-
-def pablo_residue_library(smiles, fragment, resname, records):
-    """Build an openff-pablo residue library for one attached fragment.
-
-    Pablo knows the CCD residues but not the fragment, so it needs one
-    named residue definition plus a crosslink declaration per new bond.
-
-    Parameters
-    ----------
-    smiles : str
-        The same starred SMILES that built the fragment.
-    fragment : mbuild.Compound
-        The pristine fragment, as returned by ``prepare_fragment``.
-        Its atom order matches the definition built
-        from the SMILES, so the atom names transfer by position. Do not
-        pass the fragment residue taken out of the protein: ``attach``
-        removed its leaving hydrogen, so the two atom lists differ in
-        length and the names shift by one atom.
-    resname : str
-        Residue name of the fragment in the PDB file.
-    records : list of dict
-        Output of ``Protein.bond_records()``.
-
-    Returns
-    -------
-    openff.pablo.ResidueDefinitionLibrary
-        Pass it to ``topology_from_pdb(..., residue_library=...)``.
-    """
-    from openff.pablo import STD_CCD_CACHE, ResidueDefinition
-    from openff.toolkit import Molecule
-    from rdkit import Chem
-
-    # Replace the star with hydrogen exactly as prepare_fragment does,
-    # so the definition and the fragment hold the same atoms in the
-    # same order.
-    star = Chem.RWMol(Chem.MolFromSmiles(smiles))
-    for atom in star.GetAtoms():
-        if atom.GetAtomicNum() == 0:
-            atom.SetAtomicNum(1)
-    mol = star.GetMol()
-    Chem.SanitizeMol(mol)
-    offmol = Molecule.from_rdkit(Chem.AddHs(mol), allow_undefined_stereo=True)
-
-    particles = list(fragment.particles())
-    if len(particles) != offmol.n_atoms:
-        raise ValueError(
-            f"The fragment has {len(particles)} atoms but the molecule built "
-            f"from {smiles!r} has {offmol.n_atoms}. Pass the pristine "
-            "fragment, not the residue that attach() put into the protein."
-        )
-    for atom, particle in zip(offmol.atoms, particles):
-        atom.name = particle.name
-
-    library = STD_CCD_CACHE.with_(
-        {resname: [ResidueDefinition.from_molecule(offmol, residue_name=resname)]}
-    )
-    for record in records:
-        library = library.with_crosslink(**pablo_crosslink_kwargs(record))
-    return library
 
 
 # ----------------------------------------------------------------------
