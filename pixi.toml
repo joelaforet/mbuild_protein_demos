@@ -73,7 +73,9 @@ library = CCDLibrary(download=True); library['KUT']; library['AIB']
 print('residue templates cached')"
 """
 # Installs mbuild from a local checkout, so module edits apply at once.
-dev = 'pip install --no-deps -e ../mbuild'
+# compat mode writes a plain path entry instead of an import hook, so
+# editors (Pylance, Jedi) resolve mbuild.biopolymers and show docstrings.
+dev = 'pip install --no-deps -e ../mbuild --config-settings editable_mode=compat'
 # The claim, without a notebook: builds the modified structure and
 # compares it against the workshop's own file.
 prove = "python scripts/verify_semaglutide.py"
