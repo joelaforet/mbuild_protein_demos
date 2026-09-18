@@ -11,20 +11,11 @@ residue definition, no companion file.
 
 ```
 pixi install && pixi run setup
-pixi run prove
+pixi run lab
 ```
 
-```
-  PASS  one molecule, so the linker is bonded
-  PASS  same atom count
-  PASS  same formula
-  PASS  same net charge
-  PASS  same atoms, by element and formal charge
-  PASS  same bonds, by elements and order
-  PASS  isomorphic, setting stereochemistry aside
-
-  580 atoms, 585 bonds, C187H289N45O59, net charge -2.0 elementary_charge
-```
+Open notebook 02 and run it top to bottom. Every check it makes against
+the workshop's structure is written out in the notebook itself.
 
 ## The notebooks
 
@@ -97,7 +88,6 @@ coordinates is what makes such a disagreement visible at all.
 | --- | --- |
 | `pixi run setup` | Install mBuild and Pablo, and cache the KUT and AIB residue templates. Needs network once. |
 | | Installs from `feat/biopolymers-docs`, the tip of the review stack on the fork, which contains every layer. Swap the branch for a commit SHA to pin a talk to an exact build. |
-| `pixi run prove` | Build the structure and check it against the reference. No notebook. |
 | `pixi run lab` | Open the notebooks. |
 | `pixi run verify` | Execute every notebook headless into `assets_cache/executed/`. The committed notebooks carry no outputs. |
 | `pixi run dev` | Point the environment at a local mBuild checkout. |
