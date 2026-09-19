@@ -763,3 +763,64 @@ def relax_movie(
     return RelaxationMovie(
         out_path, np.array(frames, dtype=np.float32), energies, protein
     )
+
+
+# ----------------------------------------------------------------------
+# Point-mutation helpers (notebook 3)
+
+
+def residue_to_rdkit(residue, remove_hs=True):
+    """Return an RDKit molecule of one detached Residue, for 2D drawing.
+
+    The residue's particles give the elements, ``atom_formal_charges``
+    gives the formal charges, and the bonds carry their orders, so the
+    molecule sanitizes without guessing anything. Hydrogens are removed
+    by default because a 2D depiction reads better without them.
+
+    Parameters
+    ----------
+    residue : mbuild.biopolymers.Residue
+        A detached residue, such as ``fragment_from_ccd(code, "CB")``.
+    remove_hs : bool, optional, default=True
+        Drop the hydrogens from the returned molecule.
+
+    Returns
+    -------
+    rdkit.Chem.Mol
+    """
+    from rdkit import Chem
+
+    orders = {1.0: Chem.BondType.SINGLE, 2.0: Chem.BondType.DOUBLE, 3.0: Chem.BondType.TRIPLE}
+    mol = Chem.RWMol()
+    index = {}
+    for particle in residue.particles():
+        atom = Chem.Atom(particle.element.symbol)
+        atom.SetFormalCharge(residue.atom_formal_charges.get(particle.name, 0))
+        atom.SetNoImplicit(True)
+        index[particle] = mol.AddAtom(atom)
+    for p1, p2, data in residue.bonds(return_bond_order=True):
+        mol.AddBond(index[p1], index[p2], orders[float(data["bond_order"])])
+    mol = mol.GetMol()
+    Chem.SanitizeMol(mol)
+    return Chem.RemoveHs(mol) if remove_hs else mol
+
+
+def alpha_carbon_cip(protein, resnum, chain_id):
+    """Return RDKit's CIP label (R or S) of one residue's alpha carbon.
+
+    The label is assigned from the 3D coordinates of the exported
+    molecule, so it reads the geometry the written file will carry.
+    """
+    from rdkit import Chem
+
+    mol = protein.to_rdkit()
+    Chem.AssignStereochemistryFrom3D(mol)
+    for atom in mol.GetAtoms():
+        info = atom.GetPDBResidueInfo()
+        if (
+            info.GetResidueNumber() == resnum
+            and info.GetChainId() == chain_id
+            and info.GetName().strip() == "CA"
+        ):
+            return atom.GetPropsAsDict().get("_CIPCode", "none")
+    raise KeyError(f"No CA in residue {resnum} of chain {chain_id}.")

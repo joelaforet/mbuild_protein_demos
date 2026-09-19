@@ -9,8 +9,8 @@ fragment written as SMILES onto it and takes the result through OpenFF to a
 short simulation, and notebook 05 rebuilds semaglutide's modified chain A,
 the structure the OpenFF post-translational-modification workshop
 simulates, and reads it back with the workshop's own loader call,
-unchanged. Notebooks 03 and 04, point mutations and reactions given as a
-string, join from a second branch.
+unchanged. Notebooks 03 and 04 mutate a residue's side chain and put two
+dyes on the mutant by reactions given as a string.
 
 ```
 pixi install && pixi run setup
@@ -26,6 +26,8 @@ out in the notebook itself.
 | --- | --- |
 | `01_load_and_export.ipynb` | Read a protein with its chemistry intact, and hand it to OpenFF. Why template matching rather than distance-based bond perception. |
 | `02_modify_a_protein.ipynb` | The `attach` tutorial. A fragment from star-marked SMILES, deprotonate the site, attach, relax the clash as a movie, write the PDB and bond records, build the Pablo definition and crosslink in the open, split the partial charges, simulate. |
+| `03_point_mutations.ipynb` | `mutate`: the side chains a residue can take (the 20 canonical residues and any peptide-linking CCD component, drawn with RDKit), the fibronectin S1381AzF/S1500C construct from PDB 1FNF, the same mutation from a SMILES side chain, L and D side by side, export and a Pablo round trip. |
+| `04_label_with_reactions.ipynb` | Reaction strings on `attach`: a DBCO donor clicked onto the azide, a maleimide acceptor added to the cysteine, the click product merged into one residue, and Pablo residue definitions for the three new residues built from the mBuild residues with Pablo's public API. |
 | `05_semaglutide.ipynb` | The case study. Attach the lipid linker from its CCD component to a lysine, write the PDB, read it with Pablo with no hand-written definition, check it against the workshop's structure, parameterize and simulate. |
 
 ## The evidence notebooks
