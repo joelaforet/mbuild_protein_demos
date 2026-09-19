@@ -22,6 +22,8 @@ scipy = "*"
 networkx = "*"
 treelib = "*"
 hoomd = ">=4"
+# the generic PDB loader mb.load uses, for the comparison in evidence/
+mdtraj = ">=1.11.1,<2"
 # simulation + preparation
 openmm = "*"
 pdbfixer = "*"
@@ -38,21 +40,55 @@ pyxdg = "*"
 # notebooks
 jupyterlab = "*"
 ipykernel = "*"
-nglview = ">=4.0"
+# 4.0.1 bundles a 3.1.5 JS extension, rejected by its 4.0 Python widgets.
+nglview = "==3.1.4"
 ipywidgets = ">=8"
 pip = "*"
+# NGLView 3.1.4 imports pkg_resources, removed in setuptools 81.
+setuptools = "<81"
 
 [tasks]
-# Installs the mBuild biopolymers branch and openff-pablo into this
-# environment. Run once after `pixi install`.
-setup = 'pip install --no-deps "git+https://github.com/joelaforet/mbuild.git@feat/scope-trim" "git+https://github.com/openforcefield/openff-pablo.git@v0.2.2"'
+# Installs mBuild and openff-pablo, then caches the two residue
+# templates the semaglutide notebook needs. Run once after
+# `pixi install`. Needs network; after it succeeds the demo runs offline.
+#
+# The contribution is a stack of branches on the fork, each one a review
+# layer on top of the previous. feat/biopolymers-docs is the tip, so it
+# contains every layer; installing from it gets the whole thing. The
+# branches only have to exist on the fork — whether their pull requests
+# are open, draft, or not yet opened makes no difference to pip.
+#
+# To pin the demo to an exact commit, for a talk or a bisect, replace the
+# branch with a SHA:
+#   "git+https://github.com/joelaforet/mbuild.git@ffbf083c"
+setup = """pip install --no-deps \
+  "git+https://github.com/joelaforet/mbuild.git@feat/biopolymers-docs" \
+  "git+https://github.com/openforcefield/openff-pablo.git@v0.2.2" && \
+python -c "
+from openff.pablo import STD_CCD_CACHE
+STD_CCD_CACHE.auto_download = True
+STD_CCD_CACHE.get_from_ccd('KUT'); STD_CCD_CACHE.get_from_ccd('AIB')
+from mbuild.biopolymers import CCDLibrary
+library = CCDLibrary(download=True); library['KUT']; library['AIB']
+print('residue templates cached')"
+"""
 # Installs mbuild from a local checkout, so module edits apply at once.
-dev = 'pip install --no-deps -e ../mbuild'
-# Opens the tutorials.
-lab = "jupyter lab 01_load_and_export.ipynb 02_modify_and_simulate.ipynb"
-# Executes both tutorials headless and writes the outputs back into the
-# notebook files. Use it to check that the demo still runs end to end.
-# store_widget_state=False keeps the NGLView widget state out of the
-# files: it holds the whole structure as text, it needs the NGLView
-# front end to mean anything, and it would add 360 kB of diff per run.
-verify = "jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=1800 --ExecutePreprocessor.store_widget_state=False 01_load_and_export.ipynb 02_modify_and_simulate.ipynb"
+# compat mode writes a plain path entry instead of an import hook, so
+# editors (Pylance, Jedi) resolve mbuild.biopolymers and show docstrings.
+dev = 'pip install --no-deps -e ../mbuild --config-settings editable_mode=compat'
+# Downloads the 21 MB workshop file and rebuilds the committed assets.
+# Only needed to rebuild them; the notebooks never read it.
+fetch = "python scripts/fetch_reference.py"
+assets = "python scripts/build_assets.py"
+# Executes every notebook headless, writing the executed copies to the
+# git-ignored assets_cache/executed/. The committed notebooks stay
+# output-free. The corpus notebook downloads about 9 MB from
+# openff-pablo's repository the first time.
+verify = """jupyter nbconvert --to notebook --execute --ExecutePreprocessor.timeout=1800 \
+--ExecutePreprocessor.store_widget_state=False --output-dir assets_cache/executed \
+01_load_and_export.ipynb 02_modify_a_protein.ipynb 05_semaglutide.ipynb && \
+cd evidence && jupyter nbconvert --to notebook --execute --ExecutePreprocessor.timeout=1800 \
+--output-dir ../assets_cache/executed/evidence *.ipynb"""
+# Clears outputs in place before a commit.
+clean = "jupyter nbconvert --clear-output --inplace 01_load_and_export.ipynb 02_modify_a_protein.ipynb 05_semaglutide.ipynb evidence/*.ipynb"
+charges = "python verify_charges.py"

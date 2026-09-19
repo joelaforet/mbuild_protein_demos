@@ -12,7 +12,12 @@ test, which needs a library charge for every atom, fails. Sage 2.3.0 then
 falls back to its own NAGLCharges handler for the whole protein.
 
 The charge model for the fragment is NAGL am1bcc graph charges
-(``openff-gnn-am1bcc-0.1.0-rc.3.pt``). It is not AshGC.
+(``openff-gnn-am1bcc-0.1.0-rc.3.pt``).
+
+For the remaining parameters, ``parameterize_with_preset_charges`` copies
+ff14SB terms wholly outside the site from the unmodified reference. All
+terms touching the modified residue or fragment use Sage, including terms
+across the peptide boundaries.
 
 This module supports the demonstration notebooks. It is not part of mBuild.
 """
@@ -338,58 +343,143 @@ def assign_split_charges(
 def parameterize_with_preset_charges(
     conjugate_topology,
     charged_conjugate,
-    forcefield_names=("ff14sb_off_impropers_0.0.4.offxml", "openff-2.3.0.offxml"),
+    unmodified_topology,
+    *,
+    fragment_resname,
+    resnum,
+    chain_id,
+    protein_forcefield="ff14sb_off_impropers_0.0.4.offxml",
+    site_forcefield="openff-2.3.0.offxml",
 ):
-    """Parameterize a topology and keep the preset charges of the conjugate.
+    """Use ff14SB outside the site and Sage for every term touching the site.
 
-    Parameters
-    ----------
-    conjugate_topology : openff.toolkit.Topology
-        Topology that holds the conjugate, and any other molecule.
-    charged_conjugate : openff.toolkit.Molecule
-        The conjugate with ``partial_charges`` set.
-    forcefield_names : tuple of str, optional
-        Force field files, in the order Interchange reads them.
+    The site is the complete modified residue plus its attached fragment.
+    Bonds, angles, and torsions crossing its boundary use Sage. Unmodified
+    protein terms are copied from an independently parameterized reference,
+    including every Fourier term and improper permutation. Solvent uses Sage's
+    solvent parameters. Constraints on bonds to hydrogen follow Sage's constraint
+    policy with the equilibrium lengths of the selected bond force field.
 
-    Returns
-    -------
-    openff.interchange.Interchange
-        The parameterized system.
-
-    Raises
-    ------
-    ValueError
-        On a conjugate without partial charges, a topology that does not hold
-        it, or charges that differ from the preset array. The last check
-        proves that the NAGLCharges handler of Sage 2.3.0 did not write over
-        the split charges.
+    Charges must already be assigned by ``assign_split_charges``. The
+    reference topology and explicit site selection are required so force-field
+    precedence cannot silently change the intended split. Returns Interchange.
     """
     if charged_conjugate.partial_charges is None:
         raise ValueError("the conjugate carries no partial charges")
+    _, _, residue, fragment = build_local_model(
+        charged_conjugate, fragment_resname, resnum, chain_id
+    )
+    site = residue | fragment
 
-    interchange = ForceField(*forcefield_names).create_interchange(
+    # Locate the actual conjugate, not merely a molecule with the same size.
+    wanted = [atom_key(atom) for atom in charged_conjugate.atoms]
+    candidates = []
+    for molecule in conjugate_topology.molecules:
+        if molecule.n_atoms != charged_conjugate.n_atoms:
+            continue
+        if [atom_key(atom) for atom in molecule.atoms] != wanted:
+            continue
+        if molecule.is_isomorphic_with(charged_conjugate):
+            candidates.append(molecule)
+    if len(candidates) != 1:
+        raise ValueError(
+            "expected one conjugate with matching chemistry and atom order"
+        )
+    start = conjugate_topology.atom_index(candidates[0].atom(0))
+    outside = {start + i for i in range(charged_conjugate.n_atoms) if i not in site}
+    target_indices = {key: start + i for i, key in enumerate(wanted)}
+    if len(target_indices) != len(wanted):
+        raise ValueError("duplicate atom keys in the conjugate")
+
+    reference_indices = {}
+    seen = set()
+    for i, atom in enumerate(unmodified_topology.atoms):
+        key = atom_key(atom)
+        if key in seen:
+            raise ValueError(f"two reference atoms share the key {key}")
+        seen.add(key)
+        if key in target_indices:
+            reference_indices[i] = target_indices[key]
+    if not outside <= set(reference_indices.values()):
+        raise ValueError("an unmodified protein atom is missing from the reference")
+
+    sage = ForceField(site_forcefield)
+    amber = ForceField(protein_forcefield)
+    # The Amber port omits a Constraints handler. Apply the same bonds-to-hydrogen
+    # constraint policy, resolving unspecified distances from Amber bonds.
+    if "Constraints" not in amber.registered_parameter_handlers:
+        amber.register_parameter_handler(sage["Constraints"])
+    interchange = sage.create_interchange(
         conjugate_topology, charge_from_molecules=[charged_conjugate]
     )
+    reference = amber.create_interchange(unmodified_topology)
 
-    start = None
-    for molecule in conjugate_topology.molecules:
-        if molecule.n_atoms == charged_conjugate.n_atoms:
-            start = conjugate_topology.atom_index(molecule.atom(0))
-            break
-    if start is None:
-        raise ValueError("the topology holds no molecule of the size of the conjugate")
+    # Both force fields use Lorentz-Berthelot and the same exclusion/1-4
+    # conventions (the Amber port rounds 5/6 to six decimal places).
+    for name in ("vdW", "Electrostatics"):
+        for attr in ("scale_12", "scale_13", "scale_14", "scale_15"):
+            if not np.isclose(
+                getattr(interchange[name], attr),
+                getattr(reference[name], attr),
+                atol=1e-6,
+                rtol=0,
+            ):
+                raise ValueError(f"incompatible {name} {attr} between force fields")
+    if interchange["vdW"].mixing_rule != reference["vdW"].mixing_rule:
+        raise ValueError("incompatible Lennard-Jones mixing rules")
+
+    for name in (
+        "Bonds",
+        "Angles",
+        "ProperTorsions",
+        "ImproperTorsions",
+        "vdW",
+        "Constraints",
+    ):
+        target = interchange[name]
+        source = reference[name]
+        # Remove all Sage terms wholly within the unmodified protein. Do not
+        # replace torsions one key at a time: multiplicities can differ.
+        removed = {key for key in target.key_map if set(key.atom_indices) <= outside}
+        for key in removed:
+            del target.key_map[key]
+        copied = set()
+        for key, potential_key in source.key_map.items():
+            mapped = tuple(reference_indices.get(i) for i in key.atom_indices)
+            if not set(mapped) <= outside:
+                continue
+            new_key = key.model_copy(update={"atom_indices": mapped})
+            new_potential = potential_key.model_copy(
+                update={"id": "ff14SB::" + potential_key.id}
+            )
+            target.key_map[new_key] = new_potential
+            target.potentials[new_potential] = source.potentials[potential_key]
+            copied.add(new_key)
+        # Bond/angle/proper/vdW coverage must survive the transfer. Improper
+        # definitions and optional constraints can differ between models.
+        if name not in ("ImproperTorsions", "Constraints"):
+            expected = {tuple(sorted(key.atom_indices)) for key in removed}
+            actual = {tuple(sorted(key.atom_indices)) for key in copied}
+            if actual != expected:
+                raise ValueError(f"ff14SB reference does not cover unchanged {name}")
+        used = set(target.key_map.values())
+        target.potentials = {
+            key: value for key, value in target.potentials.items() if key in used
+        }
+        print(
+            f"{name}: {len(copied)} ff14SB terms | {len(target.key_map) - len(copied)} Sage/solvent terms"
+        )
 
     preset = charged_conjugate.partial_charges.m_as(unit.elementary_charge)
-    charges = interchange["Electrostatics"].charges
     written = np.array(
         [
-            charges[key].m_as(unit.elementary_charge)
-            for key in sorted(charges, key=lambda key: key.atom_indices[0])
+            charge.m_as(unit.elementary_charge)
+            for key, charge in sorted(
+                interchange["Electrostatics"].charges.items(),
+                key=lambda item: item[0].atom_indices[0],
+            )
         ]
     )[start : start + charged_conjugate.n_atoms]
     if not np.array_equal(written, preset):
-        raise ValueError(
-            "the force field overwrote the preset charges; the largest "
-            f"difference is {np.abs(written - preset).max():.6f} e"
-        )
+        raise ValueError("the force field overwrote the preset charges")
     return interchange

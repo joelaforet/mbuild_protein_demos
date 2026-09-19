@@ -1,12 +1,19 @@
+# The 21 MB workshop file; `pixi run fetch` downloads it and
+# `pixi run assets` turns it into the two committed structures.
+assets_cache/
+
+# Structures the notebooks write.
+semaglutide_mbuild.pdb
+1ubq_prepared.pdb
+1ubq_octanoyl.pdb
+1ubq_FRET.pdb
+*.bondrecords.json
+octanoyl_relax.pdb
+_frame.pdb
+*.gif
+
 .pixi/
 __pycache__/
 .ipynb_checkpoints/
-# One set of coordinates. demo_utils writes and reads this file while it
-# builds a view or a movie frame.
-_frame.pdb
-# Movie of the octanoyl relaxation. It holds 40 copies of the protein,
-# so notebook 02 rebuilds it instead of the repository storing it.
-octanoyl_relax.pdb
-# GIF export of a movie. save_gif writes one only when DEMO_RENDER is
-# set, which needs a live browser front end.
-*_relax.gif
+.ruff_cache/
+.virtual_documents/

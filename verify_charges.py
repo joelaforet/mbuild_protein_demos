@@ -19,10 +19,11 @@ fails.
 import os
 import sys
 import time
+import tempfile
 
 import numpy as np
 from openff.pablo import STD_CCD_CACHE, ResidueDefinition, topology_from_pdb
-from openff.toolkit import Molecule
+from openff.toolkit import ForceField, Molecule
 from openff.units import unit
 from rdkit import Chem
 
@@ -42,10 +43,7 @@ FRAGMENT_RESNAME = "OC8"
 ATOM_NAME = "NZ"
 RESNUM = 63
 CHAIN_ID = "A"
-SCRATCH_DIR = (
-    "/tmp/claude-1000/-home-joelaforet-Shirts-Lab-Linux-mbuild/"
-    "e079c359-8ac9-4840-993c-a2a01a7ce492/scratchpad/vcfix"
-)
+SCRATCH_DIR = tempfile.mkdtemp(prefix="mbuild-charge-check-")
 CONJUGATE_PDB = os.path.join(SCRATCH_DIR, "1ubq_octanoyl.pdb")
 
 results = []
@@ -128,6 +126,10 @@ def residue_library(fragment, record):
     )
 
 
+def not_touching_site(key, site):
+    return not (set(key.atom_indices) & site)
+
+
 def main():
     start = time.time()
     fragment, record = build_conjugate()
@@ -201,7 +203,14 @@ def main():
     )
 
     start = time.time()
-    interchange = parameterize_with_preset_charges(conjugate_topology, charged)
+    interchange = parameterize_with_preset_charges(
+        conjugate_topology,
+        charged,
+        unmodified_topology,
+        fragment_resname=FRAGMENT_RESNAME,
+        resnum=RESNUM,
+        chain_id=CHAIN_ID,
+    )
     print(f"interchange: {time.time() - start:.1f} s")
     written = np.array(
         [
@@ -216,6 +225,67 @@ def main():
         "the force field keeps the preset charges",
         np.array_equal(written[: charged.n_atoms], charges),
         f"{charged.n_atoms} atoms equal to the preset array",
+    )
+
+    # Check provenance for every term, including the modified backbone and
+    # terms crossing peptide boundaries. Merely reversing file order fails
+    # this check when Amber still matches part of a modified residue.
+    for name in (
+        "Bonds",
+        "Angles",
+        "ProperTorsions",
+        "ImproperTorsions",
+        "vdW",
+        "Constraints",
+    ):
+        collection = interchange[name]
+        correct = all(
+            potential.id.startswith("ff14SB::") == not_touching_site(key, site)
+            for key, potential in collection.key_map.items()
+        )
+        check(
+            f"{name} force-field split",
+            correct,
+            "ff14SB outside; Sage for every term touching the site",
+        )
+
+    sage_labels = ForceField("openff-2.3.0.offxml").label_molecules(conjugate_topology)[
+        0
+    ]
+    name_map = {
+        (atom.metadata["residue_number"], atom.name): i
+        for i, atom in enumerate(charged.atoms)
+    }
+    for label, ends in (
+        ("new amide", ((63, "NZ"), (77, "C1"))),
+        ("modified backbone", ((63, "N"), (63, "CA"))),
+        ("left peptide boundary", ((62, "C"), (63, "N"))),
+        ("right peptide boundary", ((63, "C"), (64, "N"))),
+    ):
+        indices = {name_map[end] for end in ends}
+        expected = next(
+            p for key, p in sage_labels["Bonds"].items() if set(key) == indices
+        )
+        key = next(
+            key
+            for key in interchange["Bonds"].key_map
+            if set(key.atom_indices) == indices
+        )
+        potential = interchange["Bonds"].potentials[interchange["Bonds"].key_map[key]]
+        check(
+            label,
+            potential.parameters["length"] == expected.length
+            and potential.parameters["k"] == expected.k,
+            f"Sage {expected.id}, length {expected.length}",
+        )
+
+    # Export traverses the assembled valence potentials, including all Amber
+    # torsion multiplicities and impropers, and detects invalid collections.
+    system = interchange.to_openmm()
+    check(
+        "OpenMM export",
+        system.getNumParticles() == charged.n_atoms,
+        f"{system.getNumParticles()} particles, {system.getNumConstraints()} constraints",
     )
 
     return 0 if all(results) else 1
