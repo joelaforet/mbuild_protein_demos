@@ -513,9 +513,10 @@ def show_movie(
     Parameters
     ----------
     source : str or tuple
-        The path of a multi-MODEL PDB file, or the tuple that
-        ``relax_movie`` returns. The tuple form skips re-reading the
-        coordinates from the file.
+        The path of a multi-MODEL PDB file, or a tuple ``(path, frames)``
+        as ``relax_movie`` returns, where ``frames`` is an array of shape
+        (n_frames, n_atoms, 3) in Angstrom and ``path`` supplies the
+        topology; a plain single-frame PDB file serves there too.
     protein : mbuild.biopolymers.Protein, optional
         The protein whose relaxation the movie shows. It supplies the
         default selections. The atom order of the movie is the atom
@@ -535,8 +536,11 @@ def show_movie(
     if isinstance(source, (str, os.PathLike)):
         frame_text, frames = _split_models(_pdb_text(source))
     else:
+        # Frames given directly: the path only supplies the topology, so
+        # it may be a plain single-frame PDB file as well as a movie.
         path, frames = source[0], np.asarray(source[1])
-        frame_text, _ = _split_models(_pdb_text(path))
+        text = _pdb_text(path)
+        frame_text = _split_models(text)[0] if "\nMODEL" in text or text.startswith("MODEL") else text
     view = nglview.NGLWidget(_TextFrames(frame_text, frames))
     _respect_fragment_connections(view, frame_text)
     _style_view(view, *_resolve_selections(protein, link_selection, fragment_selection))

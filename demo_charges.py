@@ -104,8 +104,9 @@ def build_local_model(conjugate, fragment_resname, resnum, chain_id):
     ----------
     conjugate : openff.toolkit.Molecule
         The modified protein.
-    fragment_resname : str
-        Residue name of the fragment.
+    fragment_resname : str or None
+        Residue name of the fragment, or None when the fragment's atoms
+        were merged into the modified residue.
     resnum, chain_id : int, str
         Residue number and chain of the modified residue. Its insertion
         code must be blank.
@@ -136,13 +137,13 @@ def build_local_model(conjugate, fragment_resname, resnum, chain_id):
             and str(data["insertion_code"]).strip() == ""
         ):
             residue.add(index)
-        if data["residue_name"] == fragment_resname:
+        if fragment_resname is not None and data["residue_name"] == fragment_resname:
             fragment.add(index)
     if not residue:
         raise ValueError(
             f"no atom of the conjugate lies in chain {chain_id} residue {resnum}"
         )
-    if not fragment:
+    if fragment_resname is not None and not fragment:
         raise ValueError(f"the conjugate has no residue named {fragment_resname}")
 
     neighbours = [set() for _ in range(conjugate.n_atoms)]
@@ -150,8 +151,11 @@ def build_local_model(conjugate, fragment_resname, resnum, chain_id):
         neighbours[bond.atom1_index].add(bond.atom2_index)
         neighbours[bond.atom2_index].add(bond.atom1_index)
 
+    # With fragment_resname None the site is the modified residue alone,
+    # as after attach(merge=True), where the fragment's atoms already sit
+    # inside the residue.
     attached = {other for index in fragment for other in neighbours[index]} - fragment
-    if not attached <= residue:
+    if fragment and not attached <= residue:
         outside = ", ".join(
             _label(conjugate.atom(index)) for index in sorted(attached - residue)
         )
@@ -230,11 +234,12 @@ def _print_table(conjugate, residue, fragment, reference, graph_charge, charges)
 def assign_split_charges(
     conjugate,
     unmodified_topology,
-    fragment_resname,
-    resnum,
-    chain_id,
+    fragment_resname=None,
+    resnum=None,
+    chain_id=None,
     nagl_model="openff-gnn-am1bcc-0.1.0-rc.3.pt",
     tolerance=1e-6,
+    sites=None,
 ):
     """Set the partial charges of the conjugate from the two charge models.
 
@@ -251,8 +256,9 @@ def assign_split_charges(
         The modified protein. Its ``partial_charges`` are overwritten.
     unmodified_topology : openff.toolkit.Topology
         The protein before the modification. It supplies the ff14SB charges.
-    fragment_resname : str
-        Residue name of the fragment.
+    fragment_resname : str or None
+        Residue name of the fragment, or None for a site whose fragment
+        was merged into the modified residue.
     resnum, chain_id : int, str
         Residue number and chain of the modified residue.
     nagl_model : str, optional
@@ -260,6 +266,12 @@ def assign_split_charges(
     tolerance : float, optional
         Largest accepted difference between the net charge and the formal
         charge, in elementary charge.
+    sites : list of dict, optional
+        Several modification sites at once, each a dict with the keys
+        ``fragment_resname``, ``resnum`` and ``chain_id``. Each site gets
+        its own local model and graph charges; the residual is spread
+        over the atoms of all of them. When given, the three site
+        arguments above are ignored.
 
     Returns
     -------
@@ -273,16 +285,21 @@ def assign_split_charges(
         sum outside the site, a residual per atom of the site above 0.005 e,
         or a net charge off the formal charge by more than ``tolerance``.
     """
-    local, kept_indices, residue, fragment = build_local_model(
-        conjugate, fragment_resname, resnum, chain_id
-    )
-    NAGLToolkitWrapper().assign_partial_charges(local, partial_charge_method=nagl_model)
-    graph_charge = {
-        index: local.partial_charges[order].m_as(unit.elementary_charge)
-        for order, index in enumerate(kept_indices)
-    }
-
-    site = residue | fragment
+    if sites is None:
+        sites = [dict(fragment_resname=fragment_resname, resnum=resnum, chain_id=chain_id)]
+    graph_charge = {}
+    site = set()
+    models = []
+    for spec in sites:
+        local, kept_indices, residue, fragment = build_local_model(
+            conjugate, spec["fragment_resname"], spec["resnum"], spec["chain_id"]
+        )
+        NAGLToolkitWrapper().assign_partial_charges(local, partial_charge_method=nagl_model)
+        for order, index in enumerate(kept_indices):
+            if index in residue | fragment:
+                graph_charge[index] = local.partial_charges[order].m_as(unit.elementary_charge)
+        site |= residue | fragment
+        models.append((spec, residue, fragment))
     reference = library_charge_map(unmodified_topology)
     seen = set()
     charges = np.zeros(conjugate.n_atoms)
@@ -330,9 +347,11 @@ def assign_split_charges(
             f"{formal:.1f} e by more than {tolerance:g} e"
         )
 
-    site_name = conjugate.atom(min(residue)).metadata["residue_name"]
-    print(f"charges of {site_name}{resnum} and {fragment_resname}")
-    _print_table(conjugate, residue, fragment, reference, graph_charge, charges)
+    for spec, residue, fragment in models:
+        site_name = conjugate.atom(min(residue)).metadata["residue_name"]
+        with_fragment = f" and {spec['fragment_resname']}" if spec["fragment_resname"] else ""
+        print(f"charges of {site_name}{spec['resnum']}{with_fragment}")
+        _print_table(conjugate, residue, fragment, reference, graph_charge, charges)
     print(f"residual {residual:+.6f} e over {len(site)} atoms")
     print(f"per-atom smear {smear:+.6f} e | net charge {net:.9f} e")
 
@@ -345,11 +364,12 @@ def parameterize_with_preset_charges(
     charged_conjugate,
     unmodified_topology,
     *,
-    fragment_resname,
-    resnum,
-    chain_id,
+    fragment_resname=None,
+    resnum=None,
+    chain_id=None,
     protein_forcefield="ff14sb_off_impropers_0.0.4.offxml",
     site_forcefield="openff-2.3.0.offxml",
+    sites=None,
 ):
     """Use ff14SB outside the site and Sage for every term touching the site.
 
@@ -362,14 +382,19 @@ def parameterize_with_preset_charges(
 
     Charges must already be assigned by ``assign_split_charges``. The
     reference topology and explicit site selection are required so force-field
-    precedence cannot silently change the intended split. Returns Interchange.
+    precedence cannot silently change the intended split. ``sites`` names
+    several sites at once, as in ``assign_split_charges``. Returns Interchange.
     """
     if charged_conjugate.partial_charges is None:
         raise ValueError("the conjugate carries no partial charges")
-    _, _, residue, fragment = build_local_model(
-        charged_conjugate, fragment_resname, resnum, chain_id
-    )
-    site = residue | fragment
+    if sites is None:
+        sites = [dict(fragment_resname=fragment_resname, resnum=resnum, chain_id=chain_id)]
+    site = set()
+    for spec in sites:
+        _, _, residue, fragment = build_local_model(
+            charged_conjugate, spec["fragment_resname"], spec["resnum"], spec["chain_id"]
+        )
+        site |= residue | fragment
 
     # Locate the actual conjugate, not merely a molecule with the same size.
     wanted = [atom_key(atom) for atom in charged_conjugate.atoms]

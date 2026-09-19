@@ -47,6 +47,30 @@ pip = "*"
 # NGLView 3.1.4 imports pkg_resources, removed in setuptools 81.
 setuptools = "<81"
 
+# OpenMM's CUDA platform compiles its kernels against the CUDA version of
+# the environment, and the driver must accept that version: a driver that
+# reports CUDA 13.1 in nvidia-smi rejects kernels built for 13.3 with
+# CUDA_ERROR_UNSUPPORTED_PTX_VERSION. The default environment carries no
+# CUDA pin and runs everything on the CPU. Each GPU environment below pins
+# the CUDA version to one driver generation; pick the one at or below the
+# CUDA version your nvidia-smi reports, for example
+#   pixi install -e cuda13 && pixi run -e cuda13 lab
+# A machine without a GPU uses the default environment and needs none of
+# them. The pins apply on linux-64 only; macOS has no CUDA.
+[feature.cuda13.system-requirements]
+cuda = "13.1"
+[feature.cuda13.target.linux-64.dependencies]
+cuda-version = "13.1.*"
+
+[feature.cuda12.system-requirements]
+cuda = "12.6"
+[feature.cuda12.target.linux-64.dependencies]
+cuda-version = "12.6.*"
+
+[environments]
+cuda13 = ["cuda13"]
+cuda12 = ["cuda12"]
+
 [tasks]
 # Installs mBuild and openff-pablo, then caches the two residue
 # templates the semaglutide notebook needs. Run once after

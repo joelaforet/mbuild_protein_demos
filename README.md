@@ -99,6 +99,26 @@ coordinates is what makes such a disagreement visible at all.
 | `pixi run fetch` / `assets` | Re-download the workshop file and rebuild the committed structures. |
 | `pixi run clean` | Clear notebook outputs in place before committing. |
 
+### GPU (optional)
+
+The default environment runs OpenMM on the CPU and needs no GPU. OpenMM's
+CUDA platform compiles its kernels against the CUDA version of the
+environment, and your driver must accept that version; a mismatch fails
+with `CUDA_ERROR_UNSUPPORTED_PTX_VERSION`. Pick the GPU environment whose
+CUDA version is at or below the one `nvidia-smi` reports, and run
+everything in it:
+
+```bash
+nvidia-smi | head -4          # "CUDA Version: 13.1", say
+pixi install -e cuda13        # driver reports CUDA 13.1 or newer
+pixi install -e cuda12        # driver reports CUDA 12.6 to 13.0
+pixi run -e cuda13 setup
+pixi run -e cuda13 lab
+```
+
+Notebook 4's short simulation takes seconds on a GPU and a few minutes
+on a CPU. Without a GPU, use the default environment and nothing changes.
+
 ## Force fields
 
 Notebook 02 uses the OpenFF Rosemary alpha
