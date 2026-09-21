@@ -14,11 +14,35 @@ dyes on the mutant by reactions given as a string.
 
 ```
 pixi install && pixi run setup
-pixi run lab
 ```
 
+Then open the notebooks in VS Code, or run `pixi run lab` for JupyterLab.
 Open notebook 01 and go in order. Every check a notebook makes is written
 out in the notebook itself.
+
+### VS Code
+
+Open the cloned folder as the workspace and accept it as trusted. `setup`
+registers a Jupyter kernel named **Python (mbuild_protein_demos)**;
+reload the VS Code window once after `setup`, then in each notebook
+choose *Select Kernel → Jupyter Kernel… → Python (mbuild_protein_demos)*.
+Choosing the environment from *Python Environments* works too.
+
+Two files in the repository make this smooth, and both are worth knowing
+about if something looks off:
+
+- `.vscode/settings.json` points the Python extension's `pixiToolPath`
+  at `scripts/pixi-vscode`. The extension activates pixi environments by
+  running `pixi shell`, which opens an interactive shell and never returns
+  when its output is captured, so without the wrapper every kernel start
+  and restart waits about 35 seconds and leaves a stray `pixi shell`
+  process behind. The wrapper returns at once in that situation and passes
+  everything else through to the real pixi, including `pixi shell` typed
+  in a terminal. The setting only takes effect when this folder is the
+  workspace root.
+- `pixi run kernel` (re)registers the kernel, for instance after moving
+  the clone; `pixi run -e cuda13 kernel` registers a GPU one. `pixi run
+  kernel --remove` takes it out again.
 
 ## The notebooks
 
@@ -93,7 +117,8 @@ coordinates is what makes such a disagreement visible at all.
 | --- | --- |
 | `pixi run setup` | Install mBuild and Pablo, and cache the KUT and AIB residue templates. Needs network once. |
 | | Installs from `feat/biopolymers-docs`, the tip of the review stack on the fork, which contains every layer. Swap the branch for a commit SHA to pin a talk to an exact build. |
-| `pixi run lab` | Open the notebooks. |
+| `pixi run kernel` | Register the VS Code / Jupyter kernel for this environment (`setup` does this too). `--remove` unregisters it. |
+| `pixi run lab` | Open the notebooks in JupyterLab, for people not using VS Code. |
 | `pixi run verify` | Execute every notebook headless into `assets_cache/executed/`. The committed notebooks carry no outputs. |
 | `pixi run dev` | Point the environment at a local mBuild checkout. |
 | `pixi run fetch` / `assets` | Re-download the workshop file and rebuild the committed structures. |
@@ -112,8 +137,8 @@ everything in it:
 nvidia-smi | head -4          # "CUDA Version: 13.1", say
 pixi install -e cuda13        # driver reports CUDA 13.1 or newer
 pixi install -e cuda12        # driver reports CUDA 12.6 to 13.0
-pixi run -e cuda13 setup
-pixi run -e cuda13 lab
+pixi run -e cuda13 setup      # also registers "Python (mbuild_protein_demos cuda13)"
+pixi run -e cuda13 lab        # or pick that kernel in VS Code
 ```
 
 Notebook 4's short simulation takes seconds on a GPU and a few minutes

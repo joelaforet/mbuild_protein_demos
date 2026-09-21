@@ -94,8 +94,14 @@ STD_CCD_CACHE.auto_download = True
 STD_CCD_CACHE.get_from_ccd('KUT'); STD_CCD_CACHE.get_from_ccd('AIB')
 from mbuild.biopolymers import CCDLibrary
 library = CCDLibrary(download=True); library['KUT']; library['AIB']
-print('residue templates cached')"
+print('residue templates cached')" && \
+python scripts/register_kernel.py
 """
+# Registers a Jupyter kernel for this environment that starts through
+# `pixi run`. `setup` runs this already; run it again after moving the
+# clone or to register a GPU environment (`pixi run -e cuda13 kernel`).
+# `pixi run kernel --remove` undoes it. See README, "VS Code".
+kernel = "python scripts/register_kernel.py"
 # Installs mbuild from a local checkout, so module edits apply at once.
 # compat mode writes a plain path entry instead of an import hook, so
 # editors (Pylance, Jedi) resolve mbuild.biopolymers and show docstrings.
@@ -116,3 +122,5 @@ cd evidence && jupyter nbconvert --to notebook --execute --ExecutePreprocessor.t
 # Clears outputs in place before a commit.
 clean = "jupyter nbconvert --clear-output --inplace 01_load_and_export.ipynb 02_modify_a_protein.ipynb 03_point_mutations.ipynb 04_label_with_reactions.ipynb 05_semaglutide.ipynb evidence/*.ipynb"
 charges = "python verify_charges.py"
+# Starts JupyterLab from this environment, for people not using VS Code.
+lab = "jupyter lab"
