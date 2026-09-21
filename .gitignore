@@ -10,6 +10,8 @@ semaglutide_mbuild.pdb
 *.bondrecords.json
 octanoyl_relax.pdb
 _frame.pdb
+1fnf_S1381TFB.pdb
+02_demo_topology.pdb
 *.gif
 
 .pixi/
@@ -17,3 +19,5 @@ __pycache__/
 .ipynb_checkpoints/
 .ruff_cache/
 .virtual_documents/
+1fnf_prepared.pdb
+trajectory.dcd

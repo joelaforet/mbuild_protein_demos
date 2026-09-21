@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# pixi, as seen by the VS Code Python extension.
+#
+# .vscode/settings.json points `python.pixiToolPath` here. Everything is
+# passed through to the real pixi, with one exception: `pixi shell` when
+# stdout is not a terminal.
+#
+# The Python extension (checked with 2026.4) collects a pixi environment's
+# variables by running
+#     pixi shell --manifest-path pixi.toml && python printEnvVariables.py
+# with stdout captured. `pixi shell` opens an interactive shell and waits
+# for a terminal it will never get, so the extension times out after about
+# 35 s, on every kernel start and restart, and leaves the shell behind.
+# Returning at once lets the extension proceed; the Jupyter extension puts
+# the environment's bin directory on the kernel's PATH itself.
+#
+# In a real terminal (stdout is a tty) `pixi shell` runs unchanged, so
+# terminal activation still works.
+
+find_pixi() {
+    if [ -n "$PIXI_EXE" ] && [ -x "$PIXI_EXE" ]; then
+        printf '%s\n' "$PIXI_EXE"; return
+    fi
+    local candidate
+    for candidate in $(command -v -a pixi 2>/dev/null) "$HOME/.pixi/bin/pixi"; do
+        [ -x "$candidate" ] || continue
+        [ "$candidate" -ef "$0" ] && continue
+        printf '%s\n' "$candidate"; return
+    done
+    echo "pixi-vscode: pixi not found; install it from https://pixi.sh" >&2
+    exit 127
+}
+
+real_pixi=$(find_pixi) || exit $?
+
+if [ "$1" = "shell" ] && ! [ -t 1 ]; then
+    exit 0
+fi
+
+exec "$real_pixi" "$@"

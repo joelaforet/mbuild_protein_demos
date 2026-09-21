@@ -1,0 +1,6 @@
+{
+    // The Python extension activates pixi environments with `pixi shell`,
+    // which never returns outside a terminal, so every kernel start waits
+    // ~35 s. This wrapper returns at once in that case. See README, "VS Code".
+    "python.pixiToolPath": "${workspaceFolder}/scripts/pixi-vscode"
+}

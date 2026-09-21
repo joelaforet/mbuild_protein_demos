@@ -9,16 +9,40 @@ fragment written as SMILES onto it and takes the result through OpenFF to a
 short simulation, and notebook 05 rebuilds semaglutide's modified chain A,
 the structure the OpenFF post-translational-modification workshop
 simulates, and reads it back with the workshop's own loader call,
-unchanged. Notebooks 03 and 04, point mutations and reactions given as a
-string, join from a second branch.
+unchanged. Notebooks 03 and 04 mutate a residue's side chain and put two
+dyes on the mutant by reactions given as a string.
 
 ```
 pixi install && pixi run setup
-pixi run lab
 ```
 
+Then open the notebooks in VS Code, or run `pixi run lab` for JupyterLab.
 Open notebook 01 and go in order. Every check a notebook makes is written
 out in the notebook itself.
+
+### VS Code
+
+Open the cloned folder as the workspace and accept it as trusted. `setup`
+registers a Jupyter kernel named **Python (mbuild_protein_demos)**;
+reload the VS Code window once after `setup`, then in each notebook
+choose *Select Kernel → Jupyter Kernel… → Python (mbuild_protein_demos)*.
+Choosing the environment from *Python Environments* works too.
+
+Two files in the repository make this smooth, and both are worth knowing
+about if something looks off:
+
+- `.vscode/settings.json` points the Python extension's `pixiToolPath`
+  at `scripts/pixi-vscode`. The extension activates pixi environments by
+  running `pixi shell`, which opens an interactive shell and never returns
+  when its output is captured, so without the wrapper every kernel start
+  and restart waits about 35 seconds and leaves a stray `pixi shell`
+  process behind. The wrapper returns at once in that situation and passes
+  everything else through to the real pixi, including `pixi shell` typed
+  in a terminal. The setting only takes effect when this folder is the
+  workspace root.
+- `pixi run kernel` (re)registers the kernel, for instance after moving
+  the clone; `pixi run -e cuda13 kernel` registers a GPU one. `pixi run
+  kernel --remove` takes it out again.
 
 ## The notebooks
 
@@ -26,6 +50,8 @@ out in the notebook itself.
 | --- | --- |
 | `01_load_and_export.ipynb` | Read a protein with its chemistry intact, and hand it to OpenFF. Why template matching rather than distance-based bond perception. |
 | `02_modify_a_protein.ipynb` | The `attach` tutorial. A fragment from star-marked SMILES, deprotonate the site, attach, relax the clash as a movie, write the PDB and bond records, build the Pablo definition and crosslink in the open, split the partial charges, simulate. |
+| `03_point_mutations.ipynb` | `mutate`: the side chains a residue can take (the 20 canonical residues and any peptide-linking CCD component, drawn with RDKit), the fibronectin S1381AzF/S1500C construct from PDB 1FNF, the same mutation from a SMILES side chain, a side chain no library knows (three fluorobenzene rings, from SMILES) written out as `HETATM` with full `CONECT`, L and D side by side, export and a Pablo round trip. |
+| `04_label_with_reactions.ipynb` | Reaction strings on `attach`: a DBCO donor clicked onto the azide, a maleimide acceptor added to the cysteine, the click product merged into one residue, and Pablo residue definitions for the three new residues built from the mBuild residues with Pablo's public API. |
 | `05_semaglutide.ipynb` | The case study. Attach the lipid linker from its CCD component to a lysine, write the PDB, read it with Pablo with no hand-written definition, check it against the workshop's structure, parameterize and simulate. |
 
 ## The evidence notebooks
@@ -81,7 +107,7 @@ structure openff-pablo ships as its own semaglutide test fixture.
 
 One stereocentre in the linker differs between the two. mBuild places
 the linker at the geometry its CCD component defines, and at that centre
-the deposited coordinates disagree with the component. Notebook 02 says
+the deposited coordinates disagree with the component. Notebook 05 says
 so rather than hiding it: a loader that reads chemistry rather than
 coordinates is what makes such a disagreement visible at all.
 
@@ -91,24 +117,45 @@ coordinates is what makes such a disagreement visible at all.
 | --- | --- |
 | `pixi run setup` | Install mBuild and Pablo, and cache the KUT and AIB residue templates. Needs network once. |
 | | Installs from `feat/biopolymers-docs`, the tip of the review stack on the fork, which contains every layer. Swap the branch for a commit SHA to pin a talk to an exact build. |
-| `pixi run lab` | Open the notebooks. |
+| `pixi run kernel` | Register the VS Code / Jupyter kernel for this environment (`setup` does this too). `--remove` unregisters it. |
+| `pixi run lab` | Open the notebooks in JupyterLab, for people not using VS Code. |
 | `pixi run verify` | Execute every notebook headless into `assets_cache/executed/`. The committed notebooks carry no outputs. |
 | `pixi run dev` | Point the environment at a local mBuild checkout. |
 | `pixi run fetch` / `assets` | Re-download the workshop file and rebuild the committed structures. |
 | `pixi run clean` | Clear notebook outputs in place before committing. |
 
+### GPU (optional)
+
+The default environment runs OpenMM on the CPU and needs no GPU. OpenMM's
+CUDA platform compiles its kernels against the CUDA version of the
+environment, and your driver must accept that version; a mismatch fails
+with `CUDA_ERROR_UNSUPPORTED_PTX_VERSION`. Pick the GPU environment whose
+CUDA version is at or below the one `nvidia-smi` reports, and run
+everything in it:
+
+```bash
+nvidia-smi | head -4          # "CUDA Version: 13.1", say
+pixi install -e cuda13        # driver reports CUDA 13.1 or newer
+pixi install -e cuda12        # driver reports CUDA 12.6 to 13.0
+pixi run -e cuda13 setup      # also registers "Python (mbuild_protein_demos cuda13)"
+pixi run -e cuda13 lab        # or pick that kernel in VS Code
+```
+
+The simulations in notebooks 02, 04 and 05 take seconds on a GPU and
+minutes on a CPU. Each picks the fastest OpenMM platform it finds. Without a GPU, use the default environment and nothing changes.
+
 ## Force fields
 
-Notebook 02 uses the OpenFF Rosemary alpha
+Notebook 05 uses the OpenFF Rosemary alpha
 (`openff_no_water-3.0.0-alpha0.offxml`), which covers the protein and the
 modification with one model, so no charge surgery is needed.
 
-Notebook 03 keeps the split-charge treatment for the case where that is
-not true: Amber ff14SB library charges on the unmodified residues, NAGL
+Notebooks 02 and 04 keep the split-charge treatment for the case where
+that is not true: Amber ff14SB library charges on the unmodified residues, NAGL
 AM1-BCC graph charges on the fragment and the residue it is attached to,
 and the small residual spread over the atoms of that site. The two sets
 come from different fits, so atoms across the seam are not mutually
-polarized. See `docs/charge-splitting.md`.
+polarized.
 
 mBuild is responsible for the structure and the topology. Assigning a
 force field happens in another package. Here that package is OpenFF.

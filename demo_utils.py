@@ -513,9 +513,10 @@ def show_movie(
     Parameters
     ----------
     source : str or tuple
-        The path of a multi-MODEL PDB file, or the tuple that
-        ``relax_movie`` returns. The tuple form skips re-reading the
-        coordinates from the file.
+        The path of a multi-MODEL PDB file, or a tuple ``(path, frames)``
+        as ``relax_movie`` returns, where ``frames`` is an array of shape
+        (n_frames, n_atoms, 3) in Angstrom and ``path`` supplies the
+        topology; a plain single-frame PDB file serves there too.
     protein : mbuild.biopolymers.Protein, optional
         The protein whose relaxation the movie shows. It supplies the
         default selections. The atom order of the movie is the atom
@@ -535,8 +536,11 @@ def show_movie(
     if isinstance(source, (str, os.PathLike)):
         frame_text, frames = _split_models(_pdb_text(source))
     else:
+        # Frames given directly: the path only supplies the topology, so
+        # it may be a plain single-frame PDB file as well as a movie.
         path, frames = source[0], np.asarray(source[1])
-        frame_text, _ = _split_models(_pdb_text(path))
+        text = _pdb_text(path)
+        frame_text = _split_models(text)[0] if "\nMODEL" in text or text.startswith("MODEL") else text
     view = nglview.NGLWidget(_TextFrames(frame_text, frames))
     _respect_fragment_connections(view, frame_text)
     _style_view(view, *_resolve_selections(protein, link_selection, fragment_selection))
@@ -763,3 +767,64 @@ def relax_movie(
     return RelaxationMovie(
         out_path, np.array(frames, dtype=np.float32), energies, protein
     )
+
+
+# ----------------------------------------------------------------------
+# Point-mutation helpers (notebook 3)
+
+
+def residue_to_rdkit(residue, remove_hs=True):
+    """Return an RDKit molecule of one detached Residue, for 2D drawing.
+
+    The residue's particles give the elements, ``atom_formal_charges``
+    gives the formal charges, and the bonds carry their orders, so the
+    molecule sanitizes without guessing anything. Hydrogens are removed
+    by default because a 2D depiction reads better without them.
+
+    Parameters
+    ----------
+    residue : mbuild.biopolymers.Residue
+        A detached residue, such as ``fragment_from_ccd(code, "CB")``.
+    remove_hs : bool, optional, default=True
+        Drop the hydrogens from the returned molecule.
+
+    Returns
+    -------
+    rdkit.Chem.Mol
+    """
+    from rdkit import Chem
+
+    orders = {1.0: Chem.BondType.SINGLE, 2.0: Chem.BondType.DOUBLE, 3.0: Chem.BondType.TRIPLE}
+    mol = Chem.RWMol()
+    index = {}
+    for particle in residue.particles():
+        atom = Chem.Atom(particle.element.symbol)
+        atom.SetFormalCharge(residue.atom_formal_charges.get(particle.name, 0))
+        atom.SetNoImplicit(True)
+        index[particle] = mol.AddAtom(atom)
+    for p1, p2, data in residue.bonds(return_bond_order=True):
+        mol.AddBond(index[p1], index[p2], orders[float(data["bond_order"])])
+    mol = mol.GetMol()
+    Chem.SanitizeMol(mol)
+    return Chem.RemoveHs(mol) if remove_hs else mol
+
+
+def alpha_carbon_cip(protein, resnum, chain_id):
+    """Return RDKit's CIP label (R or S) of one residue's alpha carbon.
+
+    The label is assigned from the 3D coordinates of the exported
+    molecule, so it reads the geometry the written file will carry.
+    """
+    from rdkit import Chem
+
+    mol = protein.to_rdkit()
+    Chem.AssignStereochemistryFrom3D(mol)
+    for atom in mol.GetAtoms():
+        info = atom.GetPDBResidueInfo()
+        if (
+            info.GetResidueNumber() == resnum
+            and info.GetChainId() == chain_id
+            and info.GetName().strip() == "CA"
+        ):
+            return atom.GetPropsAsDict().get("_CIPCode", "none")
+    raise KeyError(f"No CA in residue {resnum} of chain {chain_id}.")
