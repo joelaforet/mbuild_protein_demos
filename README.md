@@ -50,7 +50,7 @@ about if something looks off:
 | --- | --- |
 | `01_load_and_export.ipynb` | Read a protein with its chemistry intact, and hand it to OpenFF. Why template matching rather than distance-based bond perception. |
 | `02_modify_a_protein.ipynb` | The `attach` tutorial. A fragment from star-marked SMILES, deprotonate the site, attach, relax the clash as a movie, write the PDB and bond records, build the Pablo definition and crosslink in the open, split the partial charges, simulate. |
-| `03_point_mutations.ipynb` | `mutate`: the side chains a residue can take (the 20 canonical residues and any peptide-linking CCD component, drawn with RDKit), the fibronectin S1381AzF/S1500C construct from PDB 1FNF, the same mutation from a SMILES side chain, L and D side by side, export and a Pablo round trip. |
+| `03_point_mutations.ipynb` | `mutate`: the side chains a residue can take (the 20 canonical residues and any peptide-linking CCD component, drawn with RDKit), the fibronectin S1381AzF/S1500C construct from PDB 1FNF, the same mutation from a SMILES side chain, a side chain no library knows (three fluorobenzene rings, from SMILES) written out as `HETATM` with full `CONECT`, L and D side by side, export and a Pablo round trip. |
 | `04_label_with_reactions.ipynb` | Reaction strings on `attach`: a DBCO donor clicked onto the azide, a maleimide acceptor added to the cysteine, the click product merged into one residue, and Pablo residue definitions for the three new residues built from the mBuild residues with Pablo's public API. |
 | `05_semaglutide.ipynb` | The case study. Attach the lipid linker from its CCD component to a lysine, write the PDB, read it with Pablo with no hand-written definition, check it against the workshop's structure, parameterize and simulate. |
 
@@ -107,7 +107,7 @@ structure openff-pablo ships as its own semaglutide test fixture.
 
 One stereocentre in the linker differs between the two. mBuild places
 the linker at the geometry its CCD component defines, and at that centre
-the deposited coordinates disagree with the component. Notebook 02 says
+the deposited coordinates disagree with the component. Notebook 05 says
 so rather than hiding it: a loader that reads chemistry rather than
 coordinates is what makes such a disagreement visible at all.
 
@@ -141,17 +141,17 @@ pixi run -e cuda13 setup      # also registers "Python (mbuild_protein_demos cud
 pixi run -e cuda13 lab        # or pick that kernel in VS Code
 ```
 
-Notebook 4's short simulation takes seconds on a GPU and a few minutes
-on a CPU. Without a GPU, use the default environment and nothing changes.
+The simulations in notebooks 02, 04 and 05 take seconds on a GPU and
+minutes on a CPU. Each picks the fastest OpenMM platform it finds. Without a GPU, use the default environment and nothing changes.
 
 ## Force fields
 
-Notebook 02 uses the OpenFF Rosemary alpha
+Notebook 05 uses the OpenFF Rosemary alpha
 (`openff_no_water-3.0.0-alpha0.offxml`), which covers the protein and the
 modification with one model, so no charge surgery is needed.
 
-Notebook 03 keeps the split-charge treatment for the case where that is
-not true: Amber ff14SB library charges on the unmodified residues, NAGL
+Notebooks 02 and 04 keep the split-charge treatment for the case where
+that is not true: Amber ff14SB library charges on the unmodified residues, NAGL
 AM1-BCC graph charges on the fragment and the residue it is attached to,
 and the small residual spread over the atoms of that site. The two sets
 come from different fits, so atoms across the seam are not mutually
