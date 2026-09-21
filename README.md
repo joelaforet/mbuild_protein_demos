@@ -155,7 +155,7 @@ that is not true: Amber ff14SB library charges on the unmodified residues, NAGL
 AM1-BCC graph charges on the fragment and the residue it is attached to,
 and the small residual spread over the atoms of that site. The two sets
 come from different fits, so atoms across the seam are not mutually
-polarized. See `docs/charge-splitting.md`.
+polarized.
 
 mBuild is responsible for the structure and the topology. Assigning a
 force field happens in another package. Here that package is OpenFF.
