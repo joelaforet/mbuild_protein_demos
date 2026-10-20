@@ -116,7 +116,7 @@ coordinates is what makes such a disagreement visible at all.
 | | |
 | --- | --- |
 | `pixi run setup` | Install mBuild and Pablo, and cache the KUT and AIB residue templates. Needs network once. |
-| | Installs from `feat/biopolymers-docs`, the tip of the review stack on the fork, which contains every layer. Swap the branch for a commit SHA to pin a talk to an exact build. |
+| | Installs mBuild from the fork at the release tag `biopolymers-v0.1.0` (the `biopolymers` branch: the reviewed stack, the determinism fix, the speed-ups, upstream develop and the plan/apply API). Swap the tag for a branch name or a commit SHA to try a newer build. |
 | `pixi run kernel` | Register the VS Code / Jupyter kernel for this environment (`setup` does this too). `--remove` unregisters it. |
 | `pixi run lab` | Open the notebooks in JupyterLab, for people not using VS Code. |
 | `pixi run verify` | Execute every notebook headless into `assets_cache/executed/`. The committed notebooks carry no outputs. |
